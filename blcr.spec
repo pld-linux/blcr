@@ -108,6 +108,7 @@ Moduły BLCR dla jądra Linuksa.
 	%{?with_static_libs:--enable-static} \
 %if %{with kernel}
 	%{?with_verbose:--enable-kbuild-verbose} \
+	--with-kernel-type=SMP \
 	--with-linux=%{_kernel_ver} \
 	--with-linux-src=%{_kernelsrcdir} \
 	--with-system-map=/boot/System.map-%{_kernel_ver} \
