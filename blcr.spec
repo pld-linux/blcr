@@ -19,14 +19,20 @@ Group:		Libraries
 #Source0Download: http://crd.lbl.gov/departments/computer-science/CLaSS/research/BLCR/berkeley-lab-checkpoint-restart-for-linux-blcr-downloads/
 Source0:	http://crd.lbl.gov/assets/Uploads/FTG/Projects/CheckpointRestart/downloads/%{pname}-%{version}.tar.gz
 # Source0-md5:	e0e6d3f6c117d820eaafabf2599ad37b
+# extract from diff against https://upc-bugs.lbl.gov/blcr-dist/blcr-0.8.6_b4.tar.gz
+Patch0:		%{pname}-update.patch
+Patch1:		%{pname}-am.patch
 URL:		http://crd.lbl.gov/departments/computer-science/CLaSS/research/BLCR/
+BuildRequires:	autoconf >= 2.50
+BuildRequires:	automake
+BuildRequires:	libtool
+BuildRequires:	perl-base
 %if %{with userspace}
 BuildRequires:	ftb-devel
 BuildRequires:	glibc-devel >= 5:2.4
 %endif
-BuildRequires:	perl-base
 %if %{with kernel}
-# for System.map and vmlinux symbol lookups
+# for System.map symbol lookups
 BuildRequires:	kernel%{_alt_kernel} = 3:%{_kernel_ver}
 BuildRequires:	kernel%{_alt_kernel}-module-build = 3:%{_kernel_ver}
 BuildRequires:	kernel%{_alt_kernel}-module-build >= 3:2.6
@@ -102,17 +108,22 @@ Moduły BLCR dla jądra Linuksa.
 
 %prep
 %setup -q
+%patch0 -p1
+%patch1 -p1
 
 %build
+%{__libtoolize}
+%{__aclocal}
+%{__autoconf}
+%{__autoheader}
+%{__automake}
 %configure \
 	%{?with_static_libs:--enable-static} \
 %if %{with kernel}
 	%{?with_verbose:--enable-kbuild-verbose} \
-	--with-kernel-type=SMP \
 	--with-linux=%{_kernel_ver} \
 	--with-linux-src=%{_kernelsrcdir} \
 	--with-system-map=/boot/System.map-%{_kernel_ver} \
-	--with-vmlinux=/boot/vmlinuz-%{_kernel_ver} \
 %endif
 	--with-components="%{?with_kernel:modules} %{?with_userspace:util libcr include tests examples contrib}"
 

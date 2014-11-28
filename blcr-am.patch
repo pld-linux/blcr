@@ -1,0 +1,123 @@
+--- blcr-0.8.5/tests/Makefile.am.orig	2014-11-28 20:46:49.767484487 +0100
++++ blcr-0.8.5/tests/Makefile.am	2014-11-28 21:15:47.662974583 +0100
+@@ -43,12 +43,17 @@
+ if CR_ENABLE_SHARED
+ # These test the actual cr_run utility or dlopen(), and thus require shared libs:
+ SIMPLE_scripts_shared = cr_run cr_targ cr_targ2 cr_omit dlopen
++SIMPLE_scripts_shared_sh = cr_run.sh cr_targ.sh cr_targ2.sh cr_omit.sh dlopen.sh
+ endif
+ SIMPLE_progs = atomics bug2524
+ SIMPLE_scripts = $(SIMPLE_scripts_shared) \
+ 	bug2003 run_on save_exe save_priv save_share save_all \
+ 	reloc_exe reloc_file reloc_fifo reloc_dir reloc_all \
+ 	clobber
++SIMPLE_scripts_sh = $(SIMPLE_scripts_shared_sh) \
++	bug2003.sh run_on.sh save_exe.sh save_priv.sh save_share.sh save_all.sh \
++	reloc_exe.sh reloc_file.sh reloc_fifo.sh reloc_dir.sh reloc_all.sh \
++	clobber.sh
+ SIMPLE_TESTS = $(SIMPLE_progs) $(SIMPLE_scripts)
+ 
+ # "SEQ" tests are ones that check for certain events happening in
+@@ -58,9 +63,15 @@
+ 	    critical_sections replace_cb \
+ 	    failed_cb failed_cb2 pid_in_use cs_enter_leave cs_enter_leave2 \
+ 	    cr_tryenter_cs stopped edeadlk pid_restore
++SEQ_progs_st = stage0001.st stage0002.st stage0003.st stage0004.st \
++	    critical_sections.st replace_cb.st \
++	    failed_cb.st failed_cb2.st pid_in_use.st cs_enter_leave.st cs_enter_leave2.st \
++	    cr_tryenter_cs.st stopped.st edeadlk.st pid_restore.st
+ # XXX: cb_exit has moved to "bonus" list for now.  See bug 2244.
+ # XXX: ptrace has moved to "bonus" list for now.  See bug 2455.
+ SEQ_scripts = 
++SEQ_scripts_sh = 
++SEQ_scripts_st = 
+ SEQ_TESTS = $(SEQ_progs) $(SEQ_scripts)
+ 
+ # C/R unit tests ("CRUT")
+@@ -71,6 +82,11 @@
+ 	cloexec get_info orphan overlap child mmaps hugetlbfs readdir dev_null \
+ 	cr_signal linked_fifo sigpending dpipe forward hooks math sigaltstack \
+ 	prctl lam nscd
++CRUT_progs_ct = \
++	simple.ct simple_pthread.ct cwd.ct dup.ct filedescriptors.ct pipe.ct named_fifo.ct \
++	cloexec.ct get_info.ct orphan.ct overlap.ct child.ct mmaps.ct hugetlbfs.ct readdir.ct dev_null.ct \
++	cr_signal.ct linked_fifo.ct sigpending.ct dpipe.ct forward.ct hooks.ct math.ct sigaltstack.ct \
++	prctl.ct lam nscd
+ # hugetlbfs2 moved to "bonus" list due to leak of MAP_PRIVATE pages in some kernels
+ CRUT_TESTS = $(CRUT_progs)
+ 
+@@ -83,16 +99,34 @@
+ 	guile_test clisp_test rep_test emacslisp_test \
+ 	php_test gst_test gcj_test gij_test jre_test \
+ 	ocaml_test sml_test mosml_test
++SEQ_scripts2_shared_sh = \
++	ash_test.sh bash_test.sh csh_test.sh ksh_test.sh zsh_test.sh \
++	perl_test.sh python_test.sh tcl_test.sh expect_test.sh ruby_test.sh \
++	guile_test.sh clisp_test.sh rep_test.sh emacslisp_test.sh \
++	php_test.sh gst_test.sh gcj_test.sh gij_test.sh jre_test.sh \
++	ocaml_test.sh sml_test.sh mosml_test.sh
++SEQ_scripts2_shared_st = \
++	ash_test.st bash_test.st csh_test.st ksh_test.st zsh_test.st \
++	perl_test.st python_test.st tcl_test.st expect_test.st ruby_test.st \
++	guile_test.st clisp_test.st rep_test.st emacslisp_test.st \
++	php_test.st gst_test.st gcj_test.st gij_test.st jre_test.st \
++	ocaml_test.st sml_test.st mosml_test.st
+ endif
+ if CR_HAVE_CXX
+ SEQ_testcxx = testcxx
++SEQ_testcxx_st = testcxx.st
+ testcxx_SOURCES = testcxx.cc
+ endif
+ SIMPLE_progs2 = atomics_stress
+ SIMPLE_scripts2 =
++SIMPLE_scripts2_sh =
+ SEQ_progs2 = cb_exit ptrace $(SEQ_testcxx)
++SEQ_progs2_st = cb_exit.st ptrace.st $(SEQ_testcxx_st)
+ SEQ_scripts2 = $(SEQ_scripts2_shared)
++SEQ_scripts2_sh = $(SEQ_scripts2_shared_sh)
++SEQ_scripts2_st = $(SEQ_scripts2_shared_st)
+ CRUT_progs2 = hugetlbfs2
++CRUT_progs2_ct = hugetlbfs2.ct
+ SIMPLE_TESTS2 = $(SIMPLE_progs2) $(SIMPLE_scripts2)
+ SEQ_TESTS2 = $(SEQ_progs2) $(SEQ_scripts2)
+ CRUT_TESTS2 = $(CRUT_progs2)
+@@ -146,14 +180,15 @@
+ # The .sh suffix not meant denote any specific shell
+ all_scripts = $(SIMPLE_scripts) $(SEQ_scripts) $(helper_scripts) \
+ 	      $(SIMPLE_scripts2) $(SEQ_scripts2) $(helper_scripts2)
+-all_scripts_src = $(patsubst %,%.sh,$(all_scripts))
++all_scripts_src = $(SIMPLE_scripts_sh) $(SEQ_scripts_sh) $(helper_scripts_sh) \
++		  $(SIMPLE_scripts2_sh) $(SEQ_scripts2_sh) $(helper_scripts2_sh)
+ $(all_scripts): shellinit
+ $(all_scripts) : % : %.sh
+ 	$(INSTALL_SCRIPT) $< $@
+ 
+ # Rule to wrap the SEQ tests with the seq_wrapper
+-SEQ_RUN = $(patsubst %,%.st,$(SEQ_TESTS))
+-SEQ_RUN2 = $(patsubst %,%.st,$(SEQ_TESTS2))
++SEQ_RUN = $(SEQ_progs_st) $(SEQ_scripts_st)
++SEQ_RUN2 = $(SEQ_progs2_st) $(SEQ_scripts2_st)
+ $(SEQ_RUN) $(SEQ_RUN2) : %.st : % seq_wrapper
+ 	@rm -f $@
+ 	@$(LN_S) -f seq_wrapper $@
+@@ -161,8 +196,8 @@
+ # Rule to wrap the CRUT tests with the crut_wrapper
+ # We use a 1-line script, not a symlink, in the build directory
+ # to allow crut_wrapper to be a libtool wrapper itself.
+-CRUT_RUN = $(patsubst %,%.ct,$(CRUT_TESTS))
+-CRUT_RUN2 = $(patsubst %,%.ct,$(CRUT_TESTS2))
++CRUT_RUN = $(CRUT_progs_ct)
++CRUT_RUN2 = $(CRUT_progs2_ct)
+ $(CRUT_RUN) $(CRUT_RUN2) : %.ct : % crut_wrapper
+ 	@rm -f $@
+ 	@(echo '#!/bin/sh'; \
+@@ -210,7 +245,9 @@
+ helper_progs = $(helper_progs_shared) bug2003_aux pause save_aux reloc_aux
+ helper_progs2 =
+ helper_scripts = 
++helper_scripts_sh = 
+ helper_scripts2 =
++helper_scripts2_sh =
+ 
+ # Maintainer-only tests
+ BONUS_TESTS = $(SIMPLE_TESTS2) $(SEQ_RUN2) $(CRUT_RUN2)

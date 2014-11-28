@@ -1,0 +1,2062 @@
+diff -Nur blcr-0.8.5/acinclude.m4 blcr-0.8.6_b4/acinclude.m4
+--- blcr-0.8.5/acinclude.m4	2013-01-05 01:59:58.000000000 +0100
++++ blcr-0.8.6_b4/acinclude.m4	2014-10-21 02:14:39.000000000 +0200
+@@ -22,12 +22,12 @@
+ #   along with this program; if not, write to the Free Software
+ #   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #
+-# $Id: acinclude.m4,v 1.177.14.17 2013/01/05 00:59:58 phargrov Exp $
+-AC_REVISION($Revision: 1.177.14.17 $)
++# $Id: acinclude.m4,v 1.177.14.22 2014/10/21 00:14:39 phargrov Exp $
++AC_REVISION($Revision: 1.177.14.22 $)
+ 
+ # Match all kernels major/minor we might accept
+-m4_define([cr_kern_maj_min_patt],[[\(2\.6\|3\.[0-9][0-9]*\)\.]])[]dnl  No SUBLEVEL or following
+-m4_define([cr_kern_maj_min_perl],[[(2\.6|3\.[0-9]+)\.]])[]dnl  No SUBLEVEL or following
++m4_define([cr_kern_maj_min_patt],[[\(2\.6\|3\.[0-9][0-9]*\)[-.]]])[]dnl  No SUBLEVEL or following
++m4_define([cr_kern_maj_min_perl],[[(2\.6|3\.[0-9]+)[-.]]])[]dnl  No SUBLEVEL or following
+ 
+ # cr_substr(STRING,OFFSET,[LEN])
+ # ------------------------------------------------------
+@@ -256,7 +256,7 @@
+       open(F, "echo '=${stamp}->UTS_RELEASE<-' | ${cpp_cmd} -include ${path} - |") || exit 1;
+       LINE: while (<F>) {
+         next LINE if(/^#/);
+-        if ((my $uts) = /=${stamp}->"(]cr_kern_maj_min_perl[[0-9].*)"<-/o) {
++        if ((my $uts) = /=${stamp}->"(]cr_kern_maj_min_perl[.*)"<-/o) {
+           print "$uts\n";
+           exit 0;
+         }
+@@ -309,7 +309,7 @@
+       if test -z "$cr_tmp"; then
+         # If a dependency does not exist, then make may complain.
+         # The -k and 2>/dev/null take care of that.
+-        cr_tmp=`(make -k echo_kver --no-print-directory -C $2 -f - 2>/dev/null | grep '^cr_kern_maj_min_patt') <<'_EOF_'
++        cr_tmp=`(${MAKE} -k echo_kver --no-print-directory -C $2 -f - 2>/dev/null | grep '^cr_kern_maj_min_patt') <<'_EOF_'
+ echo_kver:
+ 	@echo '$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)'
+ 
+@@ -344,11 +344,16 @@
+   else
+     AC_MSG_RESULT([$cr_result])
+   fi
+-  # Check that version is acceptible (exact match, or a prefix with the next char non-numeric)
++  # Check that version is acceptible (exact match, or a prefix with the next char non-numeric), including matches forced by --with-linux-src-ver
+   case "$cr_linux_obj_ver" in
+     [${cr_result}|${cr_result}[!0-9]*])      # the outer [] is m4 quoting
+         cr_linux_src_ver="$cr_result";;
+-    *)  cr_linux_src_ver='';;
++    *)  cr_linux_src_ver=''
++	if test x"$cr_result" = x"$LINUX_SRC_VER"; then
++	  AC_MSG_WARN([Accepting $2 as kernel source due to --with-linux-src-ver=$LINUX_SRC_VER])
++	  cr_linux_src_ver="$LINUX_SRC_VER"
++	fi
++	;;
+   esac
+ ])
+ 
+@@ -380,7 +385,7 @@
+       fi
+   done
+   CR_IF([test -z "$cr_linux_src_ver"],
+-	[AC_MSG_ERROR([Could not locate source directory corresponding to build directory '${LINUX_OBJ}'.  Please use --with-linux-src=FULL_PATH_TO_KERNEL_SRC])])
++	[AC_MSG_ERROR([Could not locate source directory corresponding to build directory '${LINUX_OBJ}'.  Please use --with-linux-src=FULL_PATH_TO_KERNEL_SRC to specify a directory and/or --with-linux-src-ver=VERSION to force use of a source directory with a version which does not appear to match the build])])
+ ])
+ 
+ # _CR_CHECK_LINUX_OBJ(VER_PATT,DIR,VAR)
+@@ -477,8 +482,8 @@
+   CR_IF([test -n "$cr_linux_obj_ver"],[CR_FIND_LINUX_SRC($cr_linux_obj_ver)])
+   CR_IF([test -n "$cr_linux_src_ver" -a -n "$cr_linux_obj_ver"],[
+     case "$cr_linux_obj_ver" in
+-      2.6.*) HAVE_LINUX_2_6=yes;;
+-      3.*.*) HAVE_LINUX_3=yes;;
++      2.6.[[0-9]]*) HAVE_LINUX_2_6=yes;;
++      3.[[0-9]]*) HAVE_LINUX_3=yes;;
+     esac
+     LINUX_VER="$cr_linux_obj_ver"
+     CR_KERNEL=`echo $cr_linux_obj_ver | tr - _`
+@@ -529,8 +534,8 @@
+   echo 'int foo = 0;' >> conftestdir/conftest.c
+   echo 'obj-m := conftest.o' >conftestdir/Makefile
+   unset cr_tmp
+-  echo "make -C ${LINUX_SRC} builddir=\"`pwd`/conftestdir\" ${KBUILD_MAKE_ARGS} CC=\"${KCC}\" V=1" >&5
+-  make -C ${LINUX_SRC} builddir="`pwd`/conftestdir" ${KBUILD_MAKE_ARGS} CC="${KCC}" V=1 >conftestdir/output 2>&1 </dev/null
++  echo "${MAKE} -C ${LINUX_SRC} builddir=\"`pwd`/conftestdir\" ${KBUILD_MAKE_ARGS} CC=\"${KCC}\" V=1" >&5
++  ${MAKE} -C ${LINUX_SRC} builddir="`pwd`/conftestdir" ${KBUILD_MAKE_ARGS} CC="${KCC}" V=1 >conftestdir/output 2>&1 </dev/null
+   if test $? = 0; then cr_tmp=`grep -m1 conftest\\.c conftestdir/output | [sed -e "s:^[ 	]*${KCC}::"]`; fi
+   cat conftestdir/output >&5
+   if test "${cr_tmp:+OK}" != OK; then
+@@ -581,6 +586,7 @@
+ 	-Wp,-MMD,*) continue;;
+ 	-I/*) ;;
+ 	-I*) arg=`echo $arg | [sed -e "s:-I:-I${LINUX_OBJ}/:"]`;;
++	-Werror=strict-prototypes) continue;; # Breaks "int main()" in our probes
+       esac
+     fi
+     cr_cvname="$cr_cvname $arg"
+@@ -682,7 +688,7 @@
+ 	#include <dlfcn.h>
+ 
+ 	extern int __libc_allocate_rtsig(int);
+-	int main()
++	int main(void)
+ 	{
+ 	  int s = -1;
+ 	  FILE *f=fopen("conftestval", "w");
+diff -Nur blcr-0.8.5/autogen.sh blcr-0.8.6_b4/autogen.sh
+--- blcr-0.8.5/autogen.sh	2012-12-22 00:32:49.000000000 +0100
++++ blcr-0.8.6_b4/autogen.sh	2014-10-07 01:12:43.000000000 +0200
+@@ -22,13 +22,13 @@
+ #   along with this program; if not, write to the Free Software
+ #   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #
+-#  $Id: autogen.sh,v 1.7.38.3 2012/12/21 23:32:49 phargrov Exp $
++#  $Id: autogen.sh,v 1.7.38.4 2014/10/06 23:12:43 phargrov Exp $
+ 
+ set -e
+ 
+ mkdir -p config
+ for dir in . ./config; do
+-  ( cd $dir && rm -f config.guess config.sub depcomp install-sh libtool ltmain.sh missing mkinstalldirs )
++  ( cd $dir && rm -f config.guess config.sub depcomp install-sh libtool ltmain.sh missing mkinstalldirs test-driver )
+ done
+ rm -rf autom4te.cache
+ aclocal
+@@ -42,6 +42,11 @@
+ 	rm -f config.sub config.guess
+ fi
+ automake --include-deps --add-missing --copy
++if test -e config/test-driver; then # Disable parallel tests:
++  rm config/test-driver
++  perl -pi -e 's/^#AUTOMAKE_OPTIONS/AUTOMAKE_OPTIONS/;' -- tests/Makefile.am
++  automake --include-deps --add-missing --copy
++fi
+ 
+ if [ -x config.status ]; then
+     echo "################################################################"
+diff -Nur blcr-0.8.5/configure.ac blcr-0.8.6_b4/configure.ac
+--- blcr-0.8.5/configure.ac	2013-01-26 01:04:25.000000000 +0100
++++ blcr-0.8.6_b4/configure.ac	2014-10-21 02:14:39.000000000 +0200
+@@ -1,7 +1,7 @@
+ # Process this file with autoconf to produce a configure script.
+ #
+ #   Berkeley Lab Checkpoint/Restart (BLCR) for Linux is Copyright (c)
+-#   2012, The Regents of the University of California, through Lawrence
++#   2014, The Regents of the University of California, through Lawrence
+ #   Berkeley National Laboratory (subject to receipt of any required
+ #   approvals from the U.S. Dept. of Energy).  All rights reserved.
+ #
+@@ -22,7 +22,7 @@
+ #   along with this program; if not, write to the Free Software
+ #   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #
+-# $Id: configure.ac,v 1.410.2.52 2013/01/26 00:04:25 phargrov Exp $
++# $Id: configure.ac,v 1.410.2.63 2014/10/21 00:14:39 phargrov Exp $
+ #
+ 
+ ################################################################################
+@@ -47,7 +47,7 @@
+ # AC_INIT wants to see constants, not shell vars, so we define these with m4.
+ m4_define(RELEASE_MAJOR, 0)
+ m4_define(RELEASE_MINOR, 8)
+-m4_define(RELEASE_PATCH, 5)
++m4_define(RELEASE_PATCH, 6_b4)
+ 
+ m4_define(RELEASE_VERSION, RELEASE_MAJOR.RELEASE_MINOR.RELEASE_PATCH)
+ AC_INIT([blcr],[RELEASE_VERSION], [http://ftg.lbl.gov/checkpoint])
+@@ -126,7 +126,7 @@
+ ################################################################################
+ # Boilerplate for versions and copyrights in generated files
+ ################################################################################
+-AC_REVISION($Revision: 1.410.2.52 $)
++AC_REVISION($Revision: 1.410.2.63 $)
+ AC_COPYRIGHT([[
+     Berkeley Lab Checkpoint/Restart (BLCR) for Linux is Copyright (c)
+     2012, The Regents of the University of California, through Lawrence
+@@ -265,6 +265,9 @@
+ AC_ARG_WITH([linux-src],
+   [AC_HELP_STRING([--with-linux-src=DIR],[specify full path to Linux kernel source directory if needed (default is to search in some standard locations)])],
+   [AS_IF([test x"$with_linux_src" != xyes],[LINUX_SRC_ARG=$with_linux_src])],)
++AC_ARG_WITH([linux-src-ver],
++  [AC_HELP_STRING([--with-linux-src-ver=VERSION],[force configure to accept a given kernel source version to use, even if it does not appear to match the build])],
++  [AS_IF([test x"$with_linux_src_ver" != xyes],[LINUX_SRC_VER=$with_linux_src_ver])],)
+ 
+ # Let user specify location of kernel System.map and/or vmlinux
+ AC_ARG_WITH([system-map],
+@@ -884,8 +887,8 @@
+ CR_CHECK_KERNEL_HEADER([asm/desc.h],[#include <linux/sched.h>])
+ CR_CHECK_KERNEL_HEADER([asm/vsyscall32.h])
+ CR_CHECK_KERNEL_HEADER([asm/i387.h])
+-CR_CHECK_KERNEL_HEADER([asm/switch_to.h])
+-CR_CHECK_KERNEL_HEADER([asm/tls.h])
++CR_CHECK_KERNEL_HEADER([asm/switch_to.h],[#include <linux/sched.h>])
++CR_CHECK_KERNEL_HEADER([asm/tls.h],[#include <linux/sched.h>])
+ 
+ CR_CHECK_KERNEL_HEADER([linux/utsrelease.h])
+ CR_CHECK_KERNEL_HEADER([generated/utsrelease.h])
+@@ -1019,6 +1022,8 @@
+ if test "${HAVE_NAMEIDATA_PATH}${HAVE_NAMEIDATA_DENTRY}" != "1"; then
+   CR_BAD_KERNEL([unable to determine composition of struct nameidata])
+ fi
++CR_CHECK_KERNEL_MEMBER([file.f_path],[#include <linux/fs.h>],
++		       [struct file],[struct path],[f_path])
+ 
+ CR_CHECK_KERNEL_CALL([path_lookup],[#include <linux/namei.h>])
+ CR_CHECK_KERNEL_CALL([kern_path],[#include <linux/namei.h>])
+@@ -1029,6 +1034,9 @@
+ 
+ CR_CHECK_KERNEL_CALL([__putname],[#include <linux/fs.h>])
+ 
++CR_CHECK_KERNEL_CALL_NARGS([vfs_getattr],[#include <linux/fs.h>],
++  [NULL,NULL],[NULL,NULL,NULL])
++
+ CR_CHECK_KERNEL_TYPE([struct delayed_work],[#include <linux/workqueue.h>])
+ 
+ # Order for "best" match
+@@ -1071,6 +1079,11 @@
+   CR_BAD_KERNEL([unable to determine type of task.pids array])
+ fi
+ 
++CR_FIND_KSYM([signal_wake_up],[CODE],
++             [extern void signal_wake_up(struct task_struct *, int);])
++CR_FIND_KSYM([signal_wake_up_state],[CODE],
++             [extern void signal_wake_up_state(struct task_struct *, int);])
++
+ # put_task_struct() requires one of these:
+ CR_FIND_KSYM([__put_task_struct],[CODE],[extern void __put_task_struct(struct task_struct *);])
+ CR_FIND_KSYM([__put_task_struct_cb],[CODE])
+@@ -1096,8 +1109,22 @@
+ CR_CHECK_KERNEL_MEMBER([thread_info.sysenter_return],[#include <linux/thread_info.h>],
+   [struct thread_info],[void *],[sysenter_return])
+ if test $CR_KARCH = arm; then
++  CR_CHECK_KERNEL_MEMBER([mm.context.sigpage],[#include <linux/sched.h>],
++    [mm_context_t],[unsigned long],[sigpage])
+   CR_CHECK_KERNEL_MEMBER([thread_info.tp_value],[#include <linux/thread_info.h>],
+     [struct thread_info],[unsigned long],[tp_value])
++  pushdef([cr_cvname],cr_cv_kconfig_HAVE_THREAD_INFO_TP_VALUE_ARRAY)[]dnl
++  AC_CACHE_CHECK([kernel thread_info.tp_value as array],cr_cvname,[
++    CR_TRY_KERNEL_COMPILE([
++	#include <linux/thread_info.h>
++    ],[
++	struct thread_info x;
++	unsigned long i = x.tp_value[1];
++    ],[cr_cvname=yes],[cr_cvname=no])
++  ])
++  CR_DEFINE(HAVE_THREAD_INFO_TP_VALUE_ARRAY,[test x$]cr_cvname[ = xyes],
++    [Define to 1 if struct thread_info.tp_value has array member 'tp_value'])
++  popdef([cr_cvname])[]dnl
+   CR_FIND_KSYM([__kuser_helper_start],[CODE],[extern int __kuser_helper_start(void);])
+   CR_FIND_KSYM([__kuser_cmpxchg],[CODE],[extern int __kuser_cmpxchg(void);])
+ fi
+@@ -1118,14 +1145,32 @@
+ if test -n "${HAVE_MAP_VSYSCALL}"; then
+   CR_FIND_KSYM([map_vsyscall],[CODE])
+ fi
+-if test $CR_KARCH = x86_64; then
++case $CR_KARCH in
++x86_64)
+   CR_FIND_KSYM([syscall32_setup_pages],[CODE],
+ 	[extern int syscall32_setup_pages(void *, int);])
+-fi
+-if test $CR_KARCH = arm; then
++  CR_FIND_KSYM([compat_arch_setup_additional_pages],[CODE],
++	[extern int compat_arch_setup_additional_pages(void *, int);])
++  ;;
++arm)
+   CR_FIND_KSYM([vectors_user_mapping],[CODE],
+ 	[extern int vectors_user_mapping(void);])
+-fi
++  ;;
++esac
++
++pushdef([cr_cvname],cr_cv_kconfig_HAVE_VM_OPS_NAME)[]dnl
++AC_CACHE_CHECK([kernel for vm_operations_struct.name],cr_cvname,[
++  CR_TRY_KERNEL_COMPILE([
++	#include <linux/sched.h>
++	#include <linux/mm.h>
++    ],[
++	struct vm_operations_struct x;
++	const char *(*name)(struct vm_area_struct *vma) = x.name;
++    ],[cr_cvname=yes],[cr_cvname=no])
++])
++popdef([cr_cvname])[]dnl
++CR_DEFINE(HAVE_VM_OPS_NAME,[test x$cr_cv_kconfig_HAVE_VM_OPS_NAME = xyes],
++	    [Define to 1 if struct vm_operations_struct has member 'name'])
+ 
+ CR_FIND_KSYM([arch_pick_mmap_layout],[CODE])
+ CR_FIND_KSYM([arch_get_unmaped_area],[CODE])
+@@ -1134,11 +1179,16 @@
+ 	[struct mm_struct],[unsigned long],[mmap_base])
+ CR_CHECK_KERNEL_MEMBER([mm.cached_hole_size],[#include <linux/sched.h>],
+ 	[struct mm_struct],[unsigned long],[cached_hole_size])
++CR_CHECK_KERNEL_MEMBER([mm.free_area_cache],[#include <linux/sched.h>],
++	[struct mm_struct],[unsigned long],[free_area_cache])
+ 
+ CR_FIND_KSYM([do_munmap],[CODE])
+ CR_CHECK_KERNEL_CALL([do_mmap],[#include <linux/mm.h>])
+ CR_CHECK_KERNEL_CALL([do_mmap_pgoff],[#include <linux/mm.h>])
+-if test -n "${HAVE_DO_MMAP_PGOFF}"; then
++
++CR_CHECK_KERNEL_CALL_NARGS([do_mmap_pgoff],[#include <linux/mm.h>],
++  [NULL,0,0,0,0,0],[NULL,0,0,0,0,0,NULL])
++if test -n "${HAVE_6_ARG_DO_MMAP_PGOFF}${HAVE_7_ARG_DO_MMAP_PGOFF}"; then
+   CR_FIND_KSYM([do_mmap_pgoff],[CODE])
+ elif test -n "${HAVE_DO_MMAP}"; then
+   CR_FIND_KSYM([do_mmap],[CODE])
+@@ -1271,6 +1321,17 @@
+   CR_CHECK_KERNEL_MEMBER([pt_regs.gs],[#include <asm/ptrace.h>],[struct pt_regs],[int],[gs])
+ fi
+ 
++if test $CR_KARCH = ppc -o $CR_KARCH = ppc64; then
++  CR_CHECK_KERNEL_MEMBER([thread.fpr],[#include <linux/sched.h>],
++			 [struct thread_struct],[void*],[fpr])
++  CR_CHECK_KERNEL_MEMBER([thread.vr],[#include <linux/sched.h>],
++			 [struct thread_struct],[void*],[vr])
++  CR_CHECK_KERNEL_MEMBER([thread.fp_state],[#include <linux/sched.h>],
++			 [struct thread_struct],[struct thread_fp_state],[fp_state])
++  CR_CHECK_KERNEL_MEMBER([thread.vr_state],[#include <linux/sched.h>],
++			 [struct thread_struct],[struct thread_vr_state],[vr_state])
++fi
++
+ CR_CHECK_KERNEL_MEMBER([inode sem],[
+     #include <linux/sched.h>
+     #include <linux/fs.h>
+@@ -1287,9 +1348,13 @@
+ 
+ CR_CHECK_KERNEL_MEMBER([mm.dumpable],[#include <linux/sched.h>],
+   [struct mm_struct],[int],[dumpable])
+-CR_FIND_KSYM([get_dumpable],[CODE],[extern int get_dumpable(struct mm_struct *mm);])
++CR_CHECK_KERNEL_CALL([get_dumpable],[#include <linux/sched.h>])
++if test -n "${HAVE_GET_DUMPABLE}"; then
++  # Note: may be an inline in some kernels
++  CR_FIND_KSYM([get_dumpable],[CODE],[extern int get_dumpable(struct mm_struct *mm);])
++fi
+ # Allow one or more match(es)
+-if test -z "${HAVE_MM_DUMPABLE}${cr_addr}"; then
++if test -z "${HAVE_MM_DUMPABLE}${HAVE_GET_DUMPABLE}"; then
+   CR_BAD_KERNEL([unable to determine how to identify non-dumpable tasks])
+ fi
+ 
+@@ -1308,6 +1373,8 @@
+   CR_CHECK_KERNEL_CALL_NARGS([dentry_open],[#include <linux/fs.h>],
+ 	[NULL,0,NULL],[NULL,NULL,0,NULL])
+ fi
++CR_CHECK_KERNEL_CALL([uid_eq],[#include <linux/sched.h>])
++CR_CHECK_KERNEL_CALL([from_kuid],[#include <linux/sched.h>])
+ 
+ CR_CHECK_KERNEL_MEMBER([task.group_info],[#include <linux/sched.h>],
+   [struct task_struct],[struct group_info *],[group_info])
+@@ -1368,6 +1435,10 @@
+ 	#include <linux/slab.h>
+ 	#include <linux/pid_namespace.h>
+     ], [struct pid_namespace],[void *],[pid_cachep])
++  CR_CHECK_KERNEL_MEMBER([pid_namespace.nr_hashed],[
++	#include <linux/slab.h>
++	#include <linux/pid_namespace.h>
++    ], [struct pid_namespace],[unsigned int],[nr_hashed])
+   CR_FIND_KSYM([pid_cachep],[DATA],[
+     #if HAVE_KMEM_CACHE_T
+       extern kmem_cache_t *pid_cachep;
+@@ -1398,16 +1469,18 @@
+ 	 #include <linux/pid.h>],
+ 	[extern void attach_pid(struct task_struct *task, enum pid_type type, struct pid *pid);])
+ 
+-# Require exactly one match
+-if test "${HAVE_2_6_0_ATTACH_PID}${HAVE_2_6_22_ATTACH_PID}${HAVE_2_6_26_ATTACH_PID}" != "1"; then
+-  CR_BAD_KERNEL([unable to determine how to call attach_pid()])
+-fi
+-
+ CR_CHECK_KERNEL_CALL([change_pid],[
+ 	#include <linux/sched.h>
+ 	#include <linux/pid.h>])
+ # OK if missing
+ 
++# Require change_pid or exactly one match to attach_pid family
++if test -z "${HAVE_CHANGE_PID}"; then
++  if test "${HAVE_2_6_0_ATTACH_PID}${HAVE_2_6_22_ATTACH_PID}${HAVE_2_6_26_ATTACH_PID}" != "1"; then
++    CR_BAD_KERNEL([unable to determine how to call attach_pid()])
++  fi
++fi
++
+ CR_CHECK_KERNEL_TYPE([struct pidmap],[
+   #if HAVE_LINUX_PSPACE_H
+     #include <linux/pspace.h>
+@@ -1493,7 +1566,7 @@
+   ],[struct pipe_inode_info],[char*],[base])
+ # OK if missing.
+ CR_CHECK_KERNEL_MEMBER([pipe_inode_info.buffers],[
+-    #include <linux/wait.h>
++    #include <linux/sched.h>
+     #include <linux/pipe_fs_i.h>
+     ],[struct pipe_inode_info],[unsigned int],[buffers])
+ # OK if missing.
+@@ -1516,9 +1589,10 @@
+       struct pipe_buf_operations p;
+       (void)p.unmap(NULL,NULL,NULL);
+     ])
++  CR_CHECK_KERNEL_CALL([copy_page_to_iter],[#include <linux/uio.h>])
+ fi
+ # Require exactly one match
+-if test "${HAVE_PIPE_INODE_INFO_BASE}${HAVE_PIPE_BUF_OPERATIONS_PIN}${HAVE_2_ARG_PIPE_OPS_UNMAP}${HAVE_3_ARG_PIPE_OPS_UNMAP}" != "1"; then
++if test "${HAVE_PIPE_INODE_INFO_BASE}${HAVE_PIPE_BUF_OPERATIONS_PIN}${HAVE_2_ARG_PIPE_OPS_UNMAP}${HAVE_3_ARG_PIPE_OPS_UNMAP}${HAVE_COPY_PAGE_TO_ITER}" != "1"; then
+   CR_BAD_KERNEL([unrecognized pipe buf operations])
+ fi
+ CR_FIND_KSYM([anon_pipe_buf_ops],[DATA],
+@@ -1607,6 +1681,9 @@
+ fi
+ 
+ CR_CHECK_KERNEL_SYMBOL([proc_root],[#include <linux/proc_fs.h>])
++CR_CHECK_KERNEL_CALL([proc_mkdir],[#include <linux/proc_fs.h>])
++CR_CHECK_KERNEL_CALL([proc_create],[#include <linux/proc_fs.h>])
++CR_CHECK_KERNEL_CALL([proc_remove],[#include <linux/proc_fs.h>])
+ 
+ # check kmalloc max size
+ CR_CHECK_KMALLOC_MAX
+@@ -1699,6 +1776,7 @@
+ # For blcr
+ CR_FIND_KSYM([set_fs_pwd],[CODE])
+ # For vmadump4
++CR_FIND_KSYM([set_mm_exe_file],[CODE])
+ CR_FIND_KSYM([sys_mremap],[CODE],
+ 	[extern asmlinkage unsigned long sys_mremap(unsigned long addr, unsigned long old_len, unsigned long new_len, unsigned long flags, unsigned long new_addr);])
+ CR_FIND_KSYM([do_sigaction],[CODE])
+@@ -1736,7 +1814,10 @@
+ fi
+ CR_FIND_KSYM([expand_files],[CODE],
+ 	[extern int expand_files(struct files_struct *, int);])
++CR_FIND_KSYM([expand_fdtable],[CODE],
++	[extern int expand_fdtable(struct files_struct *, int);])
+ CR_FIND_KSYM([__flush_icache_range],[CODE])
++CR_FIND_KSYM([flush_icache_range],[CODE])
+ 
+ CR_FIND_KSYM([sys_fchmod],[CODE],
+ 	[extern asmlinkage long sys_fchmod(int fd, mode_t mode);])
+diff -Nur blcr-0.8.5/cr_module/cr_chkpt_req.c blcr-0.8.6_b4/cr_module/cr_chkpt_req.c
+--- blcr-0.8.5/cr_module/cr_chkpt_req.c	2012-12-18 19:32:05.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_chkpt_req.c	2014-09-19 01:46:06.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_chkpt_req.c,v 1.264.6.5 2012/12/18 18:32:05 phargrov Exp $
++ * $Id: cr_chkpt_req.c,v 1.264.6.6 2014/09/18 23:46:06 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -382,7 +382,7 @@
+ // cr_is_dumpable(task)
+ #if HAVE_MM_DUMPABLE
+     #define __cr_mm_get_dumpable(mm) ((mm)->dumpable)
+-#elif defined(CR_KCODE_get_dumpable)
++#elif HAVE_GET_DUMPABLE
+     #define __cr_mm_get_dumpable(mm) get_dumpable(mm)
+ #else
+     #error
+@@ -410,8 +410,8 @@
+ 	task_lock(task);
+ 	tcred = cr_task_cred(task);
+ 	if ((!cr_is_dumpable(task) ||
+-	     ((cred->euid != tcred->suid) && (cred->euid != tcred->uid) &&
+-	      (cred->uid  != tcred->suid) && (cred->uid  != tcred->uid)))
++	     (cr_uid_ne(cred->euid, tcred->suid) && cr_uid_ne(cred->euid, tcred->uid) &&
++	      cr_uid_ne(cred->uid,  tcred->suid) && cr_uid_ne(cred->uid,  tcred->uid)))
+ 	    && !cr_capable(CAP_KILL)) {
+ 		result = -EPERM;
+ 	}
+diff -Nur blcr-0.8.5/cr_module/cr_creds.c blcr-0.8.6_b4/cr_module/cr_creds.c
+--- blcr-0.8.5/cr_module/cr_creds.c	2009-02-07 03:42:54.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_creds.c	2014-09-19 11:13:53.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_creds.c,v 1.384.8.2 2009/02/07 02:42:54 phargrov Exp $
++ * $Id: cr_creds.c,v 1.384.8.4 2014/09/19 09:13:53 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -103,7 +103,8 @@
+ 	    int gid_ok = 0; /* Assume no match for this gid */
+ 
+     #if defined(CR_KCODE_groups_search)
+-	    gid_ok = groups_search((struct group_info *)gi, g); // search is const, but not declared as such
++	    // NOTE: groups_search is const, but not always declared as such
++	    gid_ok = groups_search((struct group_info *)gi, cr_make_kgid(g));
+     #elif defined(CR_KCODE_supplemental_group_member)
+ 	    gid_ok = supplemental_group_member(g);
+     #else
+@@ -189,7 +190,7 @@
+          *
+          * Set the dumpable flag for the process, taken from 2.6.22 fs/exec.c
+          */
+-        if (my_cred->euid == my_cred->uid && my_cred->egid == my_cred->gid) {
++        if (cr_uid_eq(my_cred->euid, my_cred->uid) && cr_gid_eq(my_cred->egid, my_cred->gid)) {
+             cr_set_dumpable(current->mm, 1);
+         } else {
+             cr_set_dumpable(current->mm, cr_suid_dumpable);
+@@ -214,12 +215,12 @@
+     cr_cred_t my_cred = cr_current_cred();
+     cr_group_info_t gi;
+ 
+-    cf_creds.uid   = my_cred->uid;
+-    cf_creds.euid  = my_cred->euid;
+-    cf_creds.suid  = my_cred->suid;
+-    cf_creds.gid   = my_cred->gid;
+-    cf_creds.egid  = my_cred->egid;
+-    cf_creds.sgid  = my_cred->sgid;
++    cf_creds.uid   = cr_from_kuid(my_cred->uid);
++    cf_creds.euid  = cr_from_kuid(my_cred->euid);
++    cf_creds.suid  = cr_from_kuid(my_cred->suid);
++    cf_creds.gid   = cr_from_kgid(my_cred->gid);
++    cf_creds.egid  = cr_from_kgid(my_cred->egid);
++    cf_creds.sgid  = cr_from_kgid(my_cred->sgid);
+ 
+     /* save the number of groups, so we know how many to read later */
+     gi = cr_current_groups();
+@@ -258,7 +259,7 @@
+ 	}
+ 
+ 	for (i=0; i<cf_creds.ngroups; ++i) {
+-	    groups[i] = CR_GROUP_AT(gi, i);
++	    groups[i] = cr_from_kgid(CR_GROUP_AT(gi, i));
+ 	}
+ 
+ 	result = cr_kwrite(eb, proc_req->file, groups, sizeof_groups);
+diff -Nur blcr-0.8.5/cr_module/cr_dump_self.c blcr-0.8.6_b4/cr_module/cr_dump_self.c
+--- blcr-0.8.5/cr_module/cr_dump_self.c	2012-12-19 06:21:28.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_dump_self.c	2014-09-19 01:46:06.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_dump_self.c,v 1.228.8.7 2012/12/19 05:21:28 phargrov Exp $
++ * $Id: cr_dump_self.c,v 1.228.8.8 2014/09/18 23:46:06 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -61,8 +61,8 @@
+ 	goto out;
+     }
+ 
+-    read_lock(&tasklist_lock);
+     read_lock(&req->lock);
++    read_lock(&tasklist_lock);
+     /* loop over each task, and copy important fields into the linkage */
+     task_num = 0;
+     list_for_each_entry(cr_task, &proc_req->tasks, proc_req_list) {
+@@ -119,8 +119,8 @@
+     }
+ 
+ out_nulltask:
+-    read_unlock(&req->lock);
+     read_unlock(&tasklist_lock);
++    read_unlock(&req->lock);
+ 
+     /* This will catch the goto, and a possible race condition */
+     if (task_num != task_count) {
+diff -Nur blcr-0.8.5/cr_module/cr_io.c blcr-0.8.6_b4/cr_module/cr_io.c
+--- blcr-0.8.5/cr_module/cr_io.c	2013-01-04 05:21:24.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_io.c	2014-09-19 01:46:06.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_io.c,v 1.77.4.6 2013/01/04 04:21:24 phargrov Exp $
++ * $Id: cr_io.c,v 1.77.4.7 2014/09/18 23:46:06 phargrov Exp $
+  */
+ 
+ /*
+@@ -1308,7 +1308,7 @@
+ 	/* Attrs up-to-date, so nothing to do */
+     } else {
+ 	struct kstat stat;
+-	retval = vfs_getattr(filp->f_vfsmnt, dentry, &stat);
++	retval = cr_vfs_getattr(filp, &stat);
+ 	if (map && !retval) {
+ 	    cr_insert_object(map, map_key, (void *)1UL, GFP_KERNEL);
+ 	}
+diff -Nur blcr-0.8.5/cr_module/cr_kcompat.h blcr-0.8.6_b4/cr_module/cr_kcompat.h
+--- blcr-0.8.5/cr_module/cr_kcompat.h	2013-01-04 05:21:24.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_kcompat.h	2014-09-19 11:13:53.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_kcompat.h,v 1.247.8.8 2013/01/04 04:21:24 phargrov Exp $
++ * $Id: cr_kcompat.h,v 1.247.8.10 2014/09/19 09:13:53 phargrov Exp $
+  *
+  * This file tries to hide as much as practical the differences among Linux
+  * kernel versions.  Preferably this is done by back-porting new features, but
+@@ -171,6 +171,12 @@
+   #define CR_MAX_FDS(_fdt) ((_fdt)->max_fds)
+ #endif
+ 
++#if !defined(CR_KCODE_expand_files) && defined(CR_KCODE_expand_fdtable)
++  static __inline__ int expand_files(struct files_struct *files, int nr) {
++    return (nr < CR_MAX_FDS(cr_fdtable(files))) ? 0 : expand_fdtable(files, nr);
++  }
++#endif
++
+ #ifndef thread_group_leader
+   #define thread_group_leader(p) ((p)->pid == (p)->tgid)
+ #endif
+@@ -248,8 +254,16 @@
+   }
+ #endif
+ 
+-#if HAVE_DO_MMAP_PGOFF
++#if HAVE_6_ARG_DO_MMAP_PGOFF
+   #define cr_mmap_pgoff do_mmap_pgoff
++#elif HAVE_7_ARG_DO_MMAP_PGOFF
++  static __inline__ unsigned long
++  cr_mmap_pgoff(struct file *filp, unsigned long addr,
++                unsigned long len, unsigned long prot,
++                unsigned long flags, unsigned long pgoff) {
++    unsigned long populate;
++    return do_mmap_pgoff(filp, addr, len, prot, flags, pgoff, &populate);
++  }
+ #elif HAVE_DO_MMAP
+   #define cr_mmap_pgoff(_filp, _start, _len, _prot, _flags, _pgoff) \
+                 do_mmap(_filp, _start, _len, _prot, _flags, ((_pgoff) << PAGE_SHIFT))
+@@ -540,12 +554,6 @@
+   #error
+ #endif
+ 
+-#if HAVE_PROC_ROOT
+-  #define cr_proc_root (&proc_root)
+-#else
+-  #define cr_proc_root NULL
+-#endif
+-
+ #if HAVE_SET_DUMPABLE
+   #define cr_set_dumpable(_mm,_val)	set_dumpable((_mm),(_val))
+ #elif HAVE_MM_DUMPABLE
+@@ -560,6 +568,18 @@
+   #define cr_suid_dumpable 0
+ #endif
+ 
++#if HAVE_2_ARG_VFS_GETATTR
++  static __inline__ int cr_vfs_getattr(struct file *filp, struct kstat *stat) {
++	return vfs_getattr(&filp->f_path, stat);
++  }
++#elif HAVE_3_ARG_VFS_GETATTR
++  static __inline__ int cr_vfs_getattr(struct file *filp, struct kstat *stat) {
++        return vfs_getattr(filp->f_vfsmnt, filp->f_dentry, stat);
++  }
++#else 
++  #error
++#endif
++
+ // wait_event_timeout() first appears in 2.6.9
+ // This is reproduced from linux-2.6.9/include/linux/wait.h
+ #ifndef wait_event_timeout
+@@ -609,6 +629,30 @@
+   #define cr_task_cred(_t)	(_t)
+ #endif
+ 
++#if HAVE_UID_EQ
++  #define cr_uid_eq(_left, _right) (uid_eq(_left, _right))
++  #define cr_uid_ne(_left, _right) (!uid_eq(_left, _right))
++  #define cr_gid_eq(_left, _right) (gid_eq(_left, _right))
++  #define cr_gid_ne(_left, _right) (!gid_eq(_left, _right))
++#else
++  #define cr_uid_eq(_left, _right) ((_left) == (_right))
++  #define cr_uid_ne(_left, _right) ((_left) != (_right))
++  #define cr_gid_eq(_left, _right) ((_left) == (_right))
++  #define cr_gid_ne(_left, _right) ((_left) != (_right))
++#endif
++
++#if HAVE_FROM_KUID
++  #define cr_from_kuid(_id) from_kuid(&init_user_ns, (_id))
++  #define cr_make_kuid(_id) make_kuid(&init_user_ns, (_id))
++  #define cr_from_kgid(_id) from_kgid(&init_user_ns, (_id))
++  #define cr_make_kgid(_id) make_kgid(&init_user_ns, (_id))
++#else
++  #define cr_from_kuid(_id) (_id)
++  #define cr_make_kuid(_id) (_id)
++  #define cr_from_kgid(_id) (_id)
++  #define cr_make_kgid(_id) (_id)
++#endif
++
+ #if defined(CR_KCODE_put_fs_struct)
+   static __inline__ void cr_free_fs_struct(struct fs_struct *fs) {
+     CRI_ASSERT(atomic_read(&fs->count) == 1);
+diff -Nur blcr-0.8.5/cr_module/cr_pipes.c blcr-0.8.6_b4/cr_module/cr_pipes.c
+--- blcr-0.8.5/cr_module/cr_pipes.c	2013-01-04 05:21:24.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_pipes.c	2014-09-30 04:32:47.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_pipes.c,v 1.225.8.9 2013/01/04 04:21:24 phargrov Exp $
++ * $Id: cr_pipes.c,v 1.225.8.11 2014/09/30 02:32:47 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -125,8 +125,13 @@
+ 		     const char *name)
+ {
+     cr_errbuf_t *eb = req->errbuf;
++#if HAVE_FILE_F_PATH
++    struct dentry *dentry = first_filp->f_path.dentry;
++    struct vfsmount *mnt = first_filp->f_path.mnt;
++#else
+     struct dentry *dentry = first_filp->f_dentry;
+     struct vfsmount *mnt = first_filp->f_vfsmnt;
++#endif
+     struct dentry *new_dentry = NULL;
+     int retval = -EINVAL;
+ 
+@@ -356,7 +361,7 @@
+ 	retval = 0;
+     }
+ #else
+-    {   struct pipe_inode_info *pipe = p_inode->i_pipe;
++    {
+ 	char * p;
+         int nrbufs;
+ 
+@@ -801,9 +806,9 @@
+ 	    curbuf = pipe->curbuf;
+ 	    for (i = 0; i < pipe->nrbufs; ++i) {
+ 	        struct pipe_buffer *pbuf = pipe->bufs + curbuf;
+-	        const struct pipe_buf_operations *ops = pbuf->ops;
+ 	        char *addr;
+ #if HAVE_PIPE_BUF_OPERATIONS_PIN
++	        const struct pipe_buf_operations *ops = pbuf->ops;
+ 		int error = ops->pin(pipe, pbuf);
+ 		if (error) {
+ 	          retval = error;
+@@ -814,13 +819,19 @@
+ 	        memcpy(p, addr + pbuf->offset, pbuf->len);
+ 		ops->unmap(pipe, pbuf, addr);
+ #elif HAVE_2_ARG_PIPE_OPS_UNMAP
++	        const struct pipe_buf_operations *ops = pbuf->ops;
+ 	        addr = ops->map(filp, pipe, pbuf);
+ 	        memcpy(p, addr + pbuf->offset, pbuf->len);
+ 	        ops->unmap(pipe, pbuf);
+ #elif HAVE_3_ARG_PIPE_OPS_UNMAP
++	        const struct pipe_buf_operations *ops = pbuf->ops;
+ 	        addr = ops->map(pipe, pbuf, 0);
+ 	        memcpy(p, addr + pbuf->offset, pbuf->len);
+ 	        ops->unmap(pipe, pbuf, addr);
++#elif HAVE_COPY_PAGE_TO_ITER
++	        addr = kmap(pbuf->page);
++	        memcpy(p, addr + pbuf->offset, pbuf->len);
++	        kunmap(pbuf->page);
+ #else
+   #error "Unknown pipe buf operations"
+ #endif
+diff -Nur blcr-0.8.5/cr_module/cr_proc.c blcr-0.8.6_b4/cr_module/cr_proc.c
+--- blcr-0.8.5/cr_module/cr_proc.c	2008-06-19 09:47:57.000000000 +0200
++++ blcr-0.8.6_b4/cr_module/cr_proc.c	2014-09-19 01:46:07.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_proc.c,v 1.19 2008/06/19 07:47:57 phargrov Exp $
++ * $Id: cr_proc.c,v 1.19.12.1 2014/09/18 23:46:07 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -30,6 +30,12 @@
+ #include <linux/init.h>
+ 
+ 
++#if HAVE_PROC_ROOT
++  #define cr_proc_root (&proc_root)
++#else
++  #define cr_proc_root NULL
++#endif
++
+ /*
+  * Our proc_fs entries
+  */
+@@ -46,21 +52,31 @@
+ {
+ 	CR_KTRACE_FUNC_ENTRY();
+ 
++#if HAVE_PROC_MKDIR
++	proc_checkpoint = proc_mkdir("checkpoint", cr_proc_root);
++#else
+ 	proc_checkpoint = create_proc_entry("checkpoint", S_IFDIR, cr_proc_root);
++#endif
+ 	if (proc_checkpoint == NULL) {
+ 		CR_ERR("proc_create_entry(/proc/checkpoint/) failed");
+ 		return -ENOMEM;
+ 	}
+ 
++#if HAVE_PROC_CREATE
++	proc_ctrl = proc_create("ctrl", S_IFREG | S_IRUGO | S_IWUGO,
++				proc_checkpoint, &cr_ctrl_fops);
++#else
+ 	proc_ctrl = create_proc_entry("ctrl", S_IFREG | S_IRUGO | S_IWUGO,
+ 				      proc_checkpoint);
++	if (proc_ctrl) {
++		proc_ctrl->proc_fops = &cr_ctrl_fops;
++	}
++#endif
+ 	if (proc_ctrl == NULL) {
+ 		CR_ERR("proc_create_entry(/proc/checkpoint/ctrl) failed");
+ 		return -ENOMEM;
+ 	}
+ 
+-	proc_ctrl->proc_fops = &cr_ctrl_fops;
+-
+ 	return 0;
+ }
+ 
+@@ -74,6 +90,11 @@
+ {
+ 	CR_KTRACE_FUNC_ENTRY();
+ 
++#if HAVE_PROC_REMOVE
++	proc_remove(proc_ctrl);
++	proc_remove(proc_checkpoint);
++#else
+ 	remove_proc_entry("ctrl", proc_checkpoint);
+ 	remove_proc_entry("checkpoint", cr_proc_root);
++#endif
+ }
+diff -Nur blcr-0.8.5/cr_module/cr_rstrt_req.c blcr-0.8.6_b4/cr_module/cr_rstrt_req.c
+--- blcr-0.8.5/cr_module/cr_rstrt_req.c	2012-12-25 04:27:28.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_rstrt_req.c	2014-09-30 04:32:47.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_rstrt_req.c,v 1.393.4.16 2012/12/25 03:27:28 phargrov Exp $
++ * $Id: cr_rstrt_req.c,v 1.393.4.18 2014/09/30 02:32:47 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -290,8 +290,12 @@
+ 
+ /* Code based heavily on kernel/pid.c */
+ #include <linux/threads.h>
++#ifndef BITS_PER_PAGE
+ #define BITS_PER_PAGE (8*PAGE_SIZE)
++#endif
++#ifndef BITS_PER_PAGE_MASK
+ #define BITS_PER_PAGE_MASK (BITS_PER_PAGE-1)
++#endif
+ #if defined(CR_KDATA_pidmap_array)
+   #define cr_pidmap(nr)		&(pidmap_array[(nr) / BITS_PER_PAGE])
+   #define cr_pidmap_alloc()	((void *)get_zeroed_page(GFP_KERNEL))
+@@ -399,6 +403,9 @@
+ 	    spin_lock_irq(&pidmap_lock);
+ 	    upid = &pid->numbers[0];
+ 	    hlist_add_head_rcu(&upid->pid_chain, &pid_hash[pid_hashfn(upid->nr, upid->ns)]);
++#if HAVE_PID_NAMESPACE_NR_HASHED
++	    upid->ns->nr_hashed++;
++#endif
+ 	    spin_unlock_irq(&pidmap_lock);
+ 	#endif
+ 	}
+@@ -2341,7 +2348,6 @@
+     cr_pdata_t *priv;
+     cr_rstrt_req_t *req; 
+     cr_rstrt_proc_req_t *proc_req; 
+-    cr_errbuf_t *eb;
+     cr_task_t *cr_task = NULL;
+     int retval;
+     int old_pid = -1;
+@@ -2368,7 +2374,6 @@
+         goto out;
+     }
+ 
+-    eb = req->errbuf;
+     cr_task = lookup_task(req);
+     if (IS_ERR(cr_task)) {
+ 	retval = PTR_ERR(cr_task);
+diff -Nur blcr-0.8.5/cr_module/cr_trigger.c blcr-0.8.6_b4/cr_module/cr_trigger.c
+--- blcr-0.8.5/cr_module/cr_trigger.c	2008-12-06 00:15:19.000000000 +0100
++++ blcr-0.8.6_b4/cr_module/cr_trigger.c	2013-03-26 20:03:14.000000000 +0100
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_trigger.c,v 1.39 2008/12/05 23:15:19 phargrov Exp $
++ * $Id: cr_trigger.c,v 1.39.6.1 2013/03/26 19:03:14 phargrov Exp $
+  */
+ 
+ #include "cr_module.h"
+@@ -96,7 +96,7 @@
+ 	/* Save the "stoppedness" of the task for later restore */
+ 	cr_task->stopped = (task->state == TASK_STOPPED);
+ 	if (!retval && (cr_task->stopped)) {
+-		wake_up_process(task);
++		signal_wake_up(task,1);
+ 	}
+ 	cr_task->self_exec_id = task->self_exec_id;
+ out:
+diff -Nur blcr-0.8.5/doc/html/BLCR_Admin_Guide.html blcr-0.8.6_b4/doc/html/BLCR_Admin_Guide.html
+--- blcr-0.8.5/doc/html/BLCR_Admin_Guide.html	2013-01-29 23:32:43.000000000 +0100
++++ blcr-0.8.6_b4/doc/html/BLCR_Admin_Guide.html	2014-10-21 00:29:39.000000000 +0200
+@@ -1,7 +1,7 @@
+ <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
+ <head>
+-  <title>BLCR Admin Guide - version 0.8.5</title>
++  <title>BLCR Admin Guide - version 0.8.6_b4</title>
+   <meta http-equiv="Content-Type"
+  content="text/html; charset=ISO-8859-1">
+ </head>
+@@ -24,7 +24,7 @@
+   <li>Many "vanilla" Linux 2.6.x and 3.x.y kernels (from <a
+  href="http://www.kernel.org/">kernel.org</a>) have also been tested
+ with many glibc versions (2.2 and up).<br>
+-We believe vanilla versions 2.6.0 through 3.7.1 all work.
++We believe vanilla versions 2.6.0 through 3.16.2 all work.
+   <li>BLCR uses a set of autoconf-based feature tests to probe the
+ kernels it builds against. It is thus likely that a custom kernel based
+ on one of the above kernel sources will work with BLCR, provided that
+@@ -442,11 +442,11 @@
+ RPMs in the last few lines of output from <tt>rpmbuild</tt> - 
+ something like this:
+ </p><pre>
+-    Wrote: /usr/src/redhat/RPMS/i686/blcr-0.8.5-1.i686.rpm
+-    Wrote: /usr/src/redhat/RPMS/i686/blcr-libs-0.8.5-1.i686.rpm
+-    Wrote: /usr/src/redhat/RPMS/i686/blcr-devel-0.8.5-1.i686.rpm
+-    Wrote: /usr/src/redhat/RPMS/i686/blcr-modules_2.6.12_1.234-0.8.5-1.i686.rpm
+-    Wrote: /usr/src/redhat/RPMS/i686/blcr-testsuite-0.8.5-1.i686.rpm
++    Wrote: /usr/src/redhat/RPMS/i686/blcr-0.8.6_b4-1.i686.rpm
++    Wrote: /usr/src/redhat/RPMS/i686/blcr-libs-0.8.6_b4-1.i686.rpm
++    Wrote: /usr/src/redhat/RPMS/i686/blcr-devel-0.8.6_b4-1.i686.rpm
++    Wrote: /usr/src/redhat/RPMS/i686/blcr-modules_2.6.12_1.234-0.8.6_b4-1.i686.rpm
++    Wrote: /usr/src/redhat/RPMS/i686/blcr-testsuite-0.8.6_b4-1.i686.rpm
+ </pre>
+ You should note that the kernel version <tt>2.6.12-1.234</tt> has
+ become
+diff -Nur blcr-0.8.5/doc/html/BLCR_Users_Guide.html blcr-0.8.6_b4/doc/html/BLCR_Users_Guide.html
+--- blcr-0.8.5/doc/html/BLCR_Users_Guide.html	2013-01-29 23:32:43.000000000 +0100
++++ blcr-0.8.6_b4/doc/html/BLCR_Users_Guide.html	2014-10-21 00:29:39.000000000 +0200
+@@ -1,7 +1,7 @@
+ <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
+ <head>
+-  <title>Berkeley Lab Checkpoint/Restart User's Guide - version 0.8.5</title>
++  <title>Berkeley Lab Checkpoint/Restart User's Guide - version 0.8.6_b4</title>
+   <meta http-equiv="Content-Type"
+  content="text/html; charset=ISO-8859-1">
+ </head>
+diff -Nur blcr-0.8.5/doc/html/FAQ.html blcr-0.8.6_b4/doc/html/FAQ.html
+--- blcr-0.8.5/doc/html/FAQ.html	2013-01-29 23:32:43.000000000 +0100
++++ blcr-0.8.6_b4/doc/html/FAQ.html	2014-10-21 00:29:39.000000000 +0200
+@@ -1,12 +1,12 @@
+ <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
+ <head>
+-    <title>BLCR Frequently Asked Questions (for version 0.8.5)</title>
++    <title>BLCR Frequently Asked Questions (for version 0.8.6_b4)</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+ </head>
+ <body bgcolor="#ffffff">
+ 
+-<h1>BLCR Frequently Asked Questions (for version 0.8.5)</h1>
++<h1>BLCR Frequently Asked Questions (for version 0.8.6_b4)</h1>
+ 
+ 
+ <h3>General Questions</h3>
+@@ -104,9 +104,9 @@
+ <blockquote>
+     BLCR runs on x86 and x86_64 (Opteron/EM64T) systems running Linux 2.6.x
+     and 3.x.y kernels.
+-    With the 0.8.5 release, we believe the following to work:
++    With the 0.8.6_b4 release, we believe the following to work:
+     <ul>
+-      <li>2.6.0 through 3.7.1 on x86 and x86_64.
++      <li>2.6.0 through 3.17.x on x86 and x86_64.
+     </ul>
+     <p>BLCR 0.7.0 added experimental support for PPC (32-bit), and 0.6.0 added experimental
+        support for PPC64 and ARM.  These three architectures have been tested as follows:
+diff -Nur blcr-0.8.5/etc/blcr.rc blcr-0.8.6_b4/etc/blcr.rc
+--- blcr-0.8.5/etc/blcr.rc	2013-01-15 04:50:01.000000000 +0100
++++ blcr-0.8.6_b4/etc/blcr.rc	2013-07-24 23:13:22.000000000 +0200
+@@ -3,7 +3,19 @@
+ # chkconfig:	345 90 01
+ # description:  Load and unload BLCR kernel modules
+ #
+-# $Id: blcr.rc,v 1.17.14.1 2013/01/15 03:50:01 phargrov Exp $
++# $Id: blcr.rc,v 1.17.14.2 2013/07/24 21:13:22 phargrov Exp $
++
++### BEGIN INIT INFO
++# Provides:          blcr
++# Required-Start:    
++# Required-Stop:     
++# Default-Start:     2 3 4 5
++# Default-Stop:      0 1 6
++# Short-Description: Load BLCR kernel modules
++# Description:       This file loads the kernel modules required for
++#                    Berkeley Lab Checkpoint/Restart (BCLR).
++#                    Visit http://ftg.lbl.gov/checkpoint for information.
++### END INIT INFO
+ 
+ # The only likely configuration is these three variables:
+ PATH=/bin:/sbin:/usr/bin:/usr/sbin
+@@ -35,12 +47,12 @@
+ 
+ # Try modprobe by default, but fallback on insmod+fullpath
+ do_insmod() {
+-	modprobe $1 || (do_checkmod $1 || insmod ${module_dir}/${1}.ko)
++	(modprobe $1 >/dev/null 2>&1) || (do_checkmod $1 || insmod ${module_dir}/${1}.ko)
+ }
+ 
+ # Try modprobe -r by default, but fallback on rmmod
+ do_rmmod() {
+-	modprobe -r $1 || (do_checkmod $1 && rmmod $1)
++	(modprobe -r $1 >/dev/null 2>&1) || (do_checkmod $1 && rmmod $1)
+ }
+ 
+ do_start() {
+diff -Nur blcr-0.8.5/include/blcr_imports.h.in blcr-0.8.6_b4/include/blcr_imports.h.in
+--- blcr-0.8.5/include/blcr_imports.h.in	2010-08-12 23:58:34.000000000 +0200
++++ blcr-0.8.6_b4/include/blcr_imports.h.in	2013-07-24 22:12:33.000000000 +0200
+@@ -22,7 +22,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: blcr_imports.h.in,v 1.14.14.2 2010/08/12 21:58:34 phargrov Exp $
++ * $Id: blcr_imports.h.in,v 1.14.14.3 2013/07/24 20:12:33 phargrov Exp $
+  *
+  * This file provides otherwise missing declarations for functions
+  * and data which BLCR imports via the blcr_imports kernel module.
+@@ -65,6 +65,7 @@
+ #include <linux/dcache.h>
+ #include <linux/namei.h>
+ #include <linux/fs_struct.h>
++#include <linux/proc_fs.h>
+ #if HAVE_LINUX_SYSCALLS_H
+   #include <linux/syscalls.h>
+ #endif
+diff -Nur blcr-0.8.5/libcr/cr_core.c blcr-0.8.6_b4/libcr/cr_core.c
+--- blcr-0.8.5/libcr/cr_core.c	2009-02-18 02:23:15.000000000 +0100
++++ blcr-0.8.6_b4/libcr/cr_core.c	2014-09-19 01:46:08.000000000 +0200
+@@ -21,7 +21,7 @@
+  * License along with this library; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_core.c,v 1.206.6.2 2009/02/18 01:23:15 phargrov Exp $
++ * $Id: cr_core.c,v 1.206.6.3 2014/09/18 23:46:08 phargrov Exp $
+  */
+ 
+ #include <sys/ioctl.h>
+@@ -407,10 +407,9 @@
+ #if LIBCR_TRACING
+ 	int pid = (int)getpid();
+ #endif
+-	int rc;
+ 	info->run.index = info->cr_cb_count;
+ 	LIBCR_TRACE(LIBCR_TRACE_INFO, "[%d] START", pid);
+-	rc = cr_checkpoint(0);
++	(void) cr_checkpoint(0);
+ 	LIBCR_TRACE(LIBCR_TRACE_INFO, "[%d] DONE", pid);
+     } else if (!info->is_thread) {
+ 	CRI_ABORT("STATE ERROR.  Probably an excess call to cr_leave_cs().");
+diff -Nur blcr-0.8.5/libcr/cr_request.c blcr-0.8.6_b4/libcr/cr_request.c
+--- blcr-0.8.5/libcr/cr_request.c	2009-02-14 03:55:38.000000000 +0100
++++ blcr-0.8.6_b4/libcr/cr_request.c	2014-09-19 01:46:08.000000000 +0200
+@@ -21,7 +21,7 @@
+  * License along with this library; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: cr_request.c,v 1.222.4.1 2009/02/14 02:55:38 phargrov Exp $
++ * $Id: cr_request.c,v 1.222.4.2 2014/09/18 23:46:08 phargrov Exp $
+  *
+  * Code for clients to request checkpoints and restarts, poll and forward them.
+  */
+@@ -132,10 +132,9 @@
+ static int cri_rstrt_hndl_child_inner(void *arg) {
+     int token = (uintptr_t)arg;
+     int local_errno;
+-    int err;
+ 
+     /* Now overlay ourselves with the new image */
+-    err = __cri_syscall_token(token, CR_OP_RSTRT_CHILD, CRI_SYSCALL_NOARG, &local_errno);
++    (void) __cri_syscall_token(token, CR_OP_RSTRT_CHILD, CRI_SYSCALL_NOARG, &local_errno);
+ 
+     /* Not reached unless we've encountered a fatal error.
+      * ********** Things are hairy here **********
+diff -Nur blcr-0.8.5/libcr/Makefile.am blcr-0.8.6_b4/libcr/Makefile.am
+--- blcr-0.8.5/libcr/Makefile.am	2013-01-04 05:26:33.000000000 +0100
++++ blcr-0.8.6_b4/libcr/Makefile.am	2014-10-07 01:12:45.000000000 +0200
+@@ -55,8 +55,9 @@
+ 			-e ' [TD] \.?_fini' \
+ 			-e ' D __data_start' \
+ 			-e ' D _edata' \
+-			-e ' B __bss_start' \
+-			-e ' B _end' \
++			-e ' B _{1,2}bss_start_{0,2}' \
++			-e ' B _{1,2}bss_end_{0,2}' \
++			-e ' B _{1,2}end_{0,2}' \
+ 			-e ' T _(save|rest)[gf]pr_[123][0-9](_x)?'); \
+ 		then \
+ 		echo "ERROR: libcr_run.so leaks symbol(s), above."; \
+diff -Nur blcr-0.8.5/libcr/Makefile.in blcr-0.8.6_b4/libcr/Makefile.in
+--- blcr-0.8.5/libcr/Makefile.in	2013-01-30 01:57:44.000000000 +0100
++++ blcr-0.8.6_b4/libcr/Makefile.in	2014-10-21 02:15:26.000000000 +0200
+@@ -802,8 +802,9 @@
+ @CR_ENABLE_SHARED_TRUE@			-e ' [TD] \.?_fini' \
+ @CR_ENABLE_SHARED_TRUE@			-e ' D __data_start' \
+ @CR_ENABLE_SHARED_TRUE@			-e ' D _edata' \
+-@CR_ENABLE_SHARED_TRUE@			-e ' B __bss_start' \
+-@CR_ENABLE_SHARED_TRUE@			-e ' B _end' \
++@CR_ENABLE_SHARED_TRUE@			-e ' B _{1,2}bss_start_{0,2}' \
++@CR_ENABLE_SHARED_TRUE@			-e ' B _{1,2}bss_end_{0,2}' \
++@CR_ENABLE_SHARED_TRUE@			-e ' B _{1,2}end_{0,2}' \
+ @CR_ENABLE_SHARED_TRUE@			-e ' T _(save|rest)[gf]pr_[123][0-9](_x)?'); \
+ @CR_ENABLE_SHARED_TRUE@		then \
+ @CR_ENABLE_SHARED_TRUE@		echo "ERROR: libcr_run.so leaks symbol(s), above."; \
+diff -Nur blcr-0.8.5/LICENSE.txt blcr-0.8.6_b4/LICENSE.txt
+--- blcr-0.8.5/LICENSE.txt	2012-12-20 00:43:08.000000000 +0100
++++ blcr-0.8.6_b4/LICENSE.txt	2014-09-19 02:03:15.000000000 +0200
+@@ -1,5 +1,5 @@
+ Berkeley Lab Checkpoint/Restart (BLCR) for Linux is Copyright (c)
+-2012, The Regents of the University of California, through Lawrence
++2014, The Regents of the University of California, through Lawrence
+ Berkeley National Laboratory (subject to receipt of any required
+ approvals from the U.S. Dept. of Energy).  All rights reserved.
+ 
+diff -Nur blcr-0.8.5/Makefile.in blcr-0.8.6_b4/Makefile.in
+--- blcr-0.8.5/Makefile.in	2013-01-30 01:57:45.000000000 +0100
++++ blcr-0.8.6_b4/Makefile.in	2014-10-21 02:15:27.000000000 +0200
+@@ -664,7 +664,7 @@
+ 	*.zip*) \
+ 	  unzip $(distdir).zip ;;\
+ 	esac
+-	chmod -R a-w $(distdir); chmod a+w $(distdir)
++	chmod -R a-w $(distdir); chmod u+w $(distdir)
+ 	mkdir $(distdir)/_build
+ 	mkdir $(distdir)/_inst
+ 	chmod a-w $(distdir)
+diff -Nur blcr-0.8.5/NEWS blcr-0.8.6_b4/NEWS
+--- blcr-0.8.5/NEWS	2013-01-30 01:57:30.000000000 +0100
++++ blcr-0.8.6_b4/NEWS	2014-10-21 00:29:37.000000000 +0200
+@@ -1,6 +1,58 @@
+ This file lists the significant user-visible changes between releases
+ of BLCR, including main features and bug fixes.
+ 
++0.8.6_b4
++-----------
++October 20, 2014
++Bug fix and expanded-support release.
++ - Relative to the previous Beta:
++   + Can now parse Debian Jessie kernel naming (3.x-y vs 3.x.y).
++     Hopefully for real this time!
++   + Correct operation confirmed with 3.17.x kernels
++ - Testing is now "sufficient" for release.
++
++0.8.6_b3
++-----------
++October 6, 2014
++Bug fix and expanded-support release.
++ - Relative to the previous Beta:
++   + Fix compilation problems with recent ARM kernels
++   + A couple minor bug fixes
++   + Can now parse Debian Jessie kernel naming (3.x-y vs 3.x.y).
++   + autogen.sh now supports recent automake versions
++ - Testing on x86, x86-64, ppc and ppc64 now "sufficient" for release.
++
++0.8.6_b2
++-----------
++September 29, 2014
++Bug fix and expanded-support release.
++ - Relative to the previous Beta:
++   + Fix compilation problems with recent PPC/PPC64 kernels
++ - Testing on CPUs other than x86-64 remains "thin".
++ - The issue with Debian Jessie kernel naming remains UNresolved.
++
++0.8.6_b1
++-----------
++September 19, 2014
++Bug fix and expanded-support release.
++ - This release adds support for "vanilla" Linux kernels up to 3.16,
++   and has been tested with x86-64 3.x kernels from several popular
++   distributions.
++ - Testing on other CPUs will precede release of the final 0.8.6.
++ - This release fixes the following user-visible bugs and "issues"
++   + Fix bug 3142 - stopped.st timeout on many recent kernels
++     The problem would manifest as a failure of the stopped.st test
++     in "make check" on kernels containing the fix for CVE-2013-0871.
++   + Fix bug 2620 - /proc/PID/exe not restored on restart
++     The fix has been known since Dec 2009, but had unintentionally
++     never been applied to the 0.8.x release branch.
++   + Fix support that was broken by recent "RHEL6" kernels (such as
++     2.6.32-431.23.3.el6.x86_64).
++   + Fix possible deadlock in pid-restore code
++ - This release is known NOT to work with Debian Jessie kernels due
++   to their kernel naming scheme (3.x-y) which BLCR's configure logic
++   does not recognize.  This should be fixed in the final 0.8.6.
++
+ 0.8.5
+ -----------
+ January 29, 2013
+diff -Nur blcr-0.8.5/rpm/specfile.in blcr-0.8.6_b4/rpm/specfile.in
+--- blcr-0.8.5/rpm/specfile.in	2012-12-21 21:32:42.000000000 +0100
++++ blcr-0.8.6_b4/rpm/specfile.in	2013-07-24 23:21:13.000000000 +0200
+@@ -179,13 +179,21 @@
+ 
+ %post
+ if [ $1 = 1 ]; then
++ if [ -x /usr/lib/lsb/install_initd ]; then
++  /usr/lib/lsb/install_initd /etc/init.d/blcr
++ else
+   /sbin/chkconfig --add blcr
++ fi
+ fi
+ exit 0
+ 
+ %preun
+ if [ $1 = 0 ]; then
++ if [ -x /usr/lib/lsb/remove_initd ]; then
++  /usr/lib/lsb/remove_initd /etc/init.d/blcr
++ else
+   /sbin/chkconfig --del blcr
++ fi
+ fi
+ exit 0
+ 
+diff -Nur blcr-0.8.5/tests/crut_wrapper.c blcr-0.8.6_b4/tests/crut_wrapper.c
+--- blcr-0.8.5/tests/crut_wrapper.c	2009-03-12 21:07:38.000000000 +0100
++++ blcr-0.8.6_b4/tests/crut_wrapper.c	2014-10-07 01:12:46.000000000 +0200
+@@ -21,7 +21,7 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: crut_wrapper.c,v 1.16.4.1 2009/03/12 20:07:38 phargrov Exp $
++ * $Id: crut_wrapper.c,v 1.16.4.2 2014/10/06 23:12:46 phargrov Exp $
+  *
+  * Runs a crut-style test.
+  *
+@@ -222,7 +222,7 @@
+ 	rc = waitpid(pid, &status, 0);
+ 	timeout = 1 + alarm(0);
+ 	if ((rc < 0) && expired) goto timeout;
+-    } while ((rc < 0) && (errno = EINTR));
++    } while ((rc < 0) && (errno == EINTR));
+ 
+     while (!kill(-pid, 0)) {
+ 	if (! --timeout) goto timeout;
+@@ -365,7 +365,7 @@
+ 
+     do {
+ 	rc = waitpid(pid, &status, 0);
+-    } while ((rc < 0) && (errno = EINTR));
++    } while ((rc < 0) && (errno == EINTR));
+     if (rc < 0) {
+ 	die("waitpid(restart_cmd) failed: %s", cr_strerror(errno));
+     } else if (status) {
+diff -Nur blcr-0.8.5/tests/dlopen_aux.c blcr-0.8.6_b4/tests/dlopen_aux.c
+--- blcr-0.8.5/tests/dlopen_aux.c	2008-05-20 02:44:57.000000000 +0200
++++ blcr-0.8.6_b4/tests/dlopen_aux.c	2013-03-26 02:11:57.000000000 +0100
+@@ -1,3 +1,29 @@
++/*
++ * Berkeley Lab Checkpoint/Restart (BLCR) for Linux is Copyright (c)
++ * 2009, The Regents of the University of California, through Lawrence
++ * Berkeley National Laboratory (subject to receipt of any required
++ * approvals from the U.S. Dept. of Energy).  All rights reserved.
++ *
++ * Portions may be copyrighted by others, as may be noted in specific
++ * copyright notices within specific files.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * $Id: dlopen_aux.c,v 1.1.30.1 2013/03/26 01:11:57 phargrov Exp $
++ */
++
+ #define _GNU_SOURCE 1 // For RTLD_DEFAULT
+ #include <stdio.h>
+ #include <errno.h>
+@@ -9,8 +35,14 @@
+ 
+ #include "libcr.h"
+ 
++#ifndef _STRINGIFY
++  #define _STRINGIFY_HELPER(x) #x
++  #define _STRINGIFY(x) _STRINGIFY_HELPER(x)
++#endif
++
+ int main(void)
+ {
++    char filename[] = "libcr.so." _STRINGIFY(LIBCR_MAJOR);
+     cr_client_id_t (*my_cr_init)(void);
+     void *self_handle = dlopen(NULL, RTLD_LAZY);
+     void *libcr_handle;
+@@ -28,9 +60,9 @@
+ 	exit(1);
+     }
+ 
+-    libcr_handle = dlopen("libcr.so", RTLD_NOW);
++    libcr_handle = dlopen(filename, RTLD_NOW);
+     if (libcr_handle == NULL) {
+-	fprintf(stderr, "dlopen(libcr.so) failed unexpectedly.  Bad LD_LIBRARY_PATH?\n");
++	fprintf(stderr, "dlopen(%s) failed unexpectedly.  Bad LD_LIBRARY_PATH?\n", filename);
+ 	exit(1);
+     }
+ 
+diff -Nur blcr-0.8.5/tests/emacslisp_test.sh blcr-0.8.6_b4/tests/emacslisp_test.sh
+--- blcr-0.8.5/tests/emacslisp_test.sh	2008-04-27 23:26:39.000000000 +0200
++++ blcr-0.8.6_b4/tests/emacslisp_test.sh	2014-09-19 01:46:09.000000000 +0200
+@@ -8,7 +8,7 @@
+ \rm -f Context[123] .Context[123].tmp 2>/dev/null
+ exec 2>/dev/null # To drop job control messages
+ echo '#ST_ALARM:120'
+-$cr_run emacs -nw -q -batch \
++$cr_run_lb emacs -nw -q -batch \
+  -eval '(defun greet (n)
+ 		(princ (format "%d Hello\n" n))
+ 		(sleep-for 1)
+@@ -43,7 +43,7 @@
+ echo "# Restart^2"
+ $cr_restart Context2 2>&1 &
+ wait
+-echo "# Restart interpreter" # Note entire emacs output still might be bufferd
++echo "# Restart interpreter"
+ sleep 2
+ $cr_restart Context3 2>&1
+ \rm -f Context[123] .Context[123].tmp 2>/dev/null
+diff -Nur blcr-0.8.5/tests/Makefile.am blcr-0.8.6_b4/tests/Makefile.am
+--- blcr-0.8.5/tests/Makefile.am	2011-08-03 21:24:29.000000000 +0200
++++ blcr-0.8.6_b4/tests/Makefile.am	2014-09-19 01:46:09.000000000 +0200
+@@ -1,3 +1,8 @@
++# Uncomment the following if your automake defaults to parallel tests.
++# You'll know becuase your build will fail with output like:
++#   Makefile:1923: *** unterminated variable reference.  Stop.
++#AUTOMAKE_OPTIONS = serial-tests
++
+ # Special target (run before tests) ensures the kernel modules are loaded
+ check_module:
+ 	@(/sbin/lsmod | grep '^blcr ' > /dev/null 2>&1) || \
+diff -Nur blcr-0.8.5/tests/RUN_ME.in blcr-0.8.6_b4/tests/RUN_ME.in
+--- blcr-0.8.5/tests/RUN_ME.in	2011-08-03 21:24:29.000000000 +0200
++++ blcr-0.8.6_b4/tests/RUN_ME.in	2013-03-25 21:13:25.000000000 +0100
+@@ -33,7 +33,7 @@
+   echo   '#### BLCR modules are not loaded.  Cannot run the tests! ####'
+   echo   '#### You must insmod/modprobe the following modules as   ####'
+   echo   '#### root (in order) before you can run the test suite.  ####'
+-  echo   '####    blcr_imports   blcr_vmadump   blcr               ####'
++  echo   '####    blcr_imports   blcr                              ####'
+   echo   '#############################################################'
+   exit 1
+ fi
+diff -Nur blcr-0.8.5/tests/shellinit.in blcr-0.8.6_b4/tests/shellinit.in
+--- blcr-0.8.5/tests/shellinit.in	2008-05-23 03:30:56.000000000 +0200
++++ blcr-0.8.6_b4/tests/shellinit.in	2014-09-19 01:46:10.000000000 +0200
+@@ -26,6 +26,10 @@
+ @CR_ENABLE_SHARED_TRUE@cr_run=${cr_run:-${cr_bindir}/cr_run}
+ @CR_ENABLE_SHARED_FALSE@cr_run=env
+ export cr_run
++# cr_run which additionally attempts to force line buffered stdout.
++# This is needed for some SEQ tests.
++cr_run_lb="$cr_run"
++if (stdbuf -oL true >/dev/null 2>&1); then cr_run_lb="$cr_run stdbuf -oL"; fi
+ #
+ cr_checkpoint=${cr_checkpoint:-${cr_bindir}/cr_checkpoint}
+ export cr_checkpoint
+diff -Nur blcr-0.8.5/vmadump4/vmadump_arm.c blcr-0.8.6_b4/vmadump4/vmadump_arm.c
+--- blcr-0.8.5/vmadump4/vmadump_arm.c	2012-12-22 20:14:36.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_arm.c	2014-10-07 01:12:47.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_arm.c,v 1.8.16.5 2012/12/22 19:14:36 phargrov Exp $
++ * $Id: vmadump_arm.c,v 1.8.16.6 2014/10/06 23:12:47 phargrov Exp $
+  *
+  *  Experimental ARM support contributed by Anton V. Uzunov
+  *  <anton.uzunov@dsto.defence.gov.au> of the Australian Government
+@@ -88,12 +88,13 @@
+ 
+ #if HAVE_THREAD_INFO_TP_VALUE
+   // Store thread-specific pointer
++ #if HAVE_THREAD_INFO_TP_VALUE_ARRAY
++  thread->tp_value[1] = get_tpuser();
++ #endif
+   r = write_kern(ctx, file, &thread->tp_value,
+                  sizeof(thread->tp_value));
+   if (r != sizeof(thread->tp_value)) goto err;
+   bytes += r;
+-  VMAD_DEBUG( "vmadump: thread->tp_value == %ld",
+-              thread->tp_value );
+ #endif
+ 
+   return( bytes );
+@@ -145,13 +146,20 @@
+   r = read_kern(ctx, file, &thread->tp_value,
+                  sizeof(thread->tp_value));
+   if (r != sizeof(thread->tp_value)) goto bad_read;
+-  VMAD_DEBUG( "vmadump: thread->tp_value == %ld",
+-              thread->tp_value );
+- #if defined(has_tls_reg)
++ #if defined(has_tls_reg) && HAVE_THREAD_INFO_TP_VALUE_ARRAY
+   /* Since 2.6.36 tls_emu and had_tls_reg are macros w/ value 0 or 1 */
+   if (tls_emu) {
+     /* Do nothing */
+   } else if (has_tls_reg) {
++    asm ("mcr p15, 0, %0, c13, c0, 3" : : "r" (thread->tp_value[0]) );
++    asm ("mcr p15, 0, %0, c13, c0, 2" : : "r" (thread->tp_value[1]) );
++  } else { // Note: must be (much) later than 2.6.12
++    *((unsigned int *)0xffff0ff0) = (thread->tp_value[0]);
++  }
++ #elif defined(has_tls_reg)
++  if (tls_emu) {
++    /* Do nothing */
++  } else if (has_tls_reg) {
+     asm ("mcr p15, 0, %0, c13, c0, 3" : : "r" (thread->tp_value) );
+   } else { // Note: must be (much) later than 2.6.12
+     *((unsigned int *)0xffff0ff0) = (thread->tp_value);
+@@ -178,9 +186,20 @@
+ 
+ #if defined(ARCH_HAS_SETUP_ADDITIONAL_PAGES)
+ 
++#ifndef CONFIG_VECTORS_BASE
++  #define CONFIG_VECTORS_BASE 0xffff0000
++#endif
++
++#if HAVE_MM_CONTEXT_SIGPAGE
++  #define VMAD_SIGPAGE(_task) ((_task)->mm->context.sigpage)
++#else
++  #define VMAD_SIGPAGE(_task) 0
++#endif
++
+ int vmad_is_arch_map(const struct vm_area_struct *map)
+ {
+-	return (map->vm_start == 0xffff0000);
++	return (map->vm_start == CONFIG_VECTORS_BASE) ||
++	       (map->vm_start == VMAD_SIGPAGE(current));
+ }
+ EXPORT_SYMBOL_GPL(vmad_is_arch_map);
+ 
+@@ -196,7 +215,7 @@
+ 	head.end     = map->vm_end;
+ 	head.flags   = map->vm_flags;
+ 	head.namelen = VMAD_NAMELEN_ARCH;
+-	head.pgoff   = 0;
++	head.pgoff   = VMAD_SIGPAGE(current);
+ 
+ 	up_read(&current->mm->mmap_sem);
+ 	r = write_kern(ctx, file, &head, sizeof(head));
+@@ -217,11 +236,9 @@
+ 
+     /* First check if the mapping is still/already in place */
+     down_read(&current->mm->mmap_sem);
+-    map = find_vma(current->mm, 0xffff0000);
++    map = find_vma(current->mm, CONFIG_VECTORS_BASE);
+     up_read(&current->mm->mmap_sem);
+     if (map != NULL) goto out;
+-    
+-    /* NOT REACHED - since in practice we'll never remove the mapping. */
+ 
+   #if HAVE_2_ARG_ARCH_SETUP_ADDITIONAL_PAGES
+     r = arch_setup_additional_pages(NULL, 0);
+@@ -235,6 +252,18 @@
+ 	goto err;
+     }
+ 
++  #if HAVE_MM_CONTEXT_SIGPAGE
++    // TODO: Can we fixup the boot-time randomization in [sigpage]?
++    if (head->pgoff && VMAD_SIGPAGE(current) != head->pgoff) {
++        r = vmad_remap(ctx, VMAD_SIGPAGE(current), head->pgoff, PAGE_SIZE);
++	if (r < 0) {
++	    CR_ERR_CTX(ctx, "sigpage remap failed %d", (int)r); 
++	    goto err;
++	}
++	VMAD_SIGPAGE(current) = head->pgoff;
++    }
++  #endif
++
+ out:
+     r = 0;
+ err:
+diff -Nur blcr-0.8.5/vmadump4/vmadump_common.c blcr-0.8.6_b4/vmadump4/vmadump_common.c
+--- blcr-0.8.5/vmadump4/vmadump_common.c	2013-01-29 21:17:11.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_common.c	2014-09-19 01:46:11.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_common.c,v 1.86.4.14 2013/01/29 20:17:11 phargrov Exp $
++ * $Id: vmadump_common.c,v 1.86.4.17 2014/09/18 23:46:11 phargrov Exp $
+  *
+  * THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -565,10 +565,12 @@
+         !filp->f_mapping->a_ops->direct_IO)
+         goto out;
+   #elif HAVE_INODE_I_MAPPING
++  {
+     struct inode *inode = filp->f_dentry->d_inode;
+     if (!inode->i_mapping || !inode->i_mapping->a_ops ||
+         !inode->i_mapping->a_ops->direct_IO)
+         goto out;
++  }
+   #else
+     #error
+   #endif
+@@ -718,6 +720,7 @@
+     long mapaddr;
+     int open_flags;
+     unsigned long prot;
++    unsigned long start, end, pgoff;
+ 
+     if (head->flags & VM_MAYSHARE) {
+ 	if (head->flags & VM_MAYWRITE) {
+@@ -746,16 +749,27 @@
+ 	return PTR_ERR(file);
+     }
+ 
++    start = head->start;
++    end   = head->end;
++    pgoff = head->pgoff;
++
+     down_write(&current->mm->mmap_sem);
+-    mapaddr = cr_mmap_pgoff(file, head->start, head->end - head->start,
+-			    prot, flags, head->pgoff);
++    if (start & VMAD_VM_EXECUTABLE) {
++	start ^= VMAD_VM_EXECUTABLE;
++#if defined(CR_KCODE_set_mm_exe_file)
++	if (!current->mm->exe_file)
++	    set_mm_exe_file(current->mm, file);
++#endif
++    }
++    mapaddr = cr_mmap_pgoff(file, start, end - start,
++			    prot, flags, pgoff);
+     up_write(&current->mm->mmap_sem);
+     fput(file);
+-    if (mapaddr != head->start)
++    if (mapaddr != start)
+ 	CR_ERR_CTX(ctx, "mmap(<file>, %p, %p, ...) failed: %p",
+-	       (void *) head->start, (void *) (head->end-head->start),
++	       (void *) start, (void *) (end-start),
+ 	       (void *) mapaddr);
+-    return (mapaddr == head->start) ? 0 : mapaddr;
++    return (mapaddr == start) ? 0 : mapaddr;
+ }
+ 
+ /* Reads in the header giving the the number of bytes of "fill" to
+@@ -893,6 +907,9 @@
+     long r;
+     unsigned long mmap_prot, mmap_flags, addr;
+ 
++    const unsigned long start = head->start & ~VMAD_VM_EXECUTABLE;
++    const unsigned long len = head->end - start; 
++
+     if (head->namelen == VMAD_NAMELEN_ARCH) {
+ #if VMAD_HAVE_ARCH_MAPS
+ 	return vmad_load_arch_map(ctx, file, head);
+@@ -941,13 +958,13 @@
+     } else {
+ 	/* Load the data from the dump file */
+ 	down_write(&current->mm->mmap_sem);
+-	addr = cr_mmap_pgoff(0, head->start, head->end - head->start,
++	addr = cr_mmap_pgoff(0, start, len,
+ 			     mmap_prot|PROT_WRITE, mmap_flags, 0);
+ 	up_write(&current->mm->mmap_sem);
+-	if (addr != head->start) {
++	if (addr != start) {
+ 	    CR_ERR_CTX(ctx, "mmap(0, %08lx, %08lx, ...) = 0x%08lx (failed)",
+-		   head->start, head->end - head->start, addr);
+-            if ((addr != head->start) && IS_ERR((void *) addr)) {
++		   start, len, addr);
++            if ((addr != start) && IS_ERR((void *) addr)) {
+                 r = PTR_ERR((void *) addr);
+             } else {
+                 r = -EINVAL;
+@@ -961,7 +978,7 @@
+     r = vmadump_load_page_list(ctx, file, (mmap_prot & PROT_EXEC));
+     if (r) goto err;
+ 
+-    if (sys_mprotect(head->start,head->end - head->start, mmap_prot))
++    if (sys_mprotect(start, len, mmap_prot))
+ 	CR_ERR_CTX(ctx, "thaw: mprotect failed. (ignoring)");
+     return 0;
+ 
+@@ -1304,16 +1321,25 @@
+ #if defined(CR_KCODE_arch_pick_mmap_layout)
+     arch_pick_mmap_layout(mm);
+ #endif
+-#if HAVE_MM_MMAP_BASE
++
+     /* want to restore these even if arch_pick_mmap_layout() set them */
++#if HAVE_MM_MMAP_BASE
+     mm->mmap_base = mmap_base;
++#endif
++#if HAVE_MM_FREE_AREA_CACHE
++#  if HAVE_MM_MMAP_BASE
+     mm->free_area_cache = mmap_base;
+-#else
++#  else
+     mm->free_area_cache = TASK_UNMAPPED_BASE;
++#  endif
+ #endif
+ #if HAVE_MM_CACHED_HOLE_SIZE
+     mm->cached_hole_size = ~0UL;
+ #endif
++
++#if defined(CR_KCODE_set_mm_exe_file)
++    set_mm_exe_file(current->mm, NULL);
++#endif
+     up_write(&current->mm->mmap_sem);
+ 
+     /* Load new map data */
+@@ -1805,6 +1831,7 @@
+ 	    /* Region is an executable */
+ 	    if (flags & VMAD_DUMP_EXEC)
+ 		head.namelen = 0;
++	    head.start |= VMAD_VM_EXECUTABLE;
+ 	} else if (is_library(filename)) {
+ 	    /* Region is a library */
+ 	    if (flags & VMAD_DUMP_LIBS)
+diff -Nur blcr-0.8.5/vmadump4/vmadump.h blcr-0.8.6_b4/vmadump4/vmadump.h
+--- blcr-0.8.5/vmadump4/vmadump.h	2012-12-18 19:32:09.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump.h	2013-07-24 22:12:34.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump.h,v 1.47.4.2 2012/12/18 18:32:09 phargrov Exp $
++ * $Id: vmadump.h,v 1.47.4.3 2013/07/24 20:12:34 phargrov Exp $
+  *
+  *  THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -42,6 +42,9 @@
+     unsigned long  pgoff;	/* file offset for mmap, in page units */
+ };
+ 
++/* Flag(s) ORed into start field of struct vmadump_vma_header: */
++#define VMAD_VM_EXECUTABLE 1UL
++
+ struct vmadump_page_header {
+     unsigned long start;	/* ~0 = end of list */
+     unsigned int num_pages;
+diff -Nur blcr-0.8.5/vmadump4/vmadump_i386.c blcr-0.8.6_b4/vmadump4/vmadump_i386.c
+--- blcr-0.8.5/vmadump4/vmadump_i386.c	2012-12-22 08:42:52.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_i386.c	2014-09-19 01:46:11.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_i386.c,v 1.38.8.4 2012/12/22 07:42:52 phargrov Exp $
++ * $Id: vmadump_i386.c,v 1.38.8.5 2014/09/18 23:46:11 phargrov Exp $
+  *
+  * THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -303,6 +303,7 @@
+ 
+ int vmad_is_arch_map(const struct vm_area_struct *map)
+ {
++	if (vmad_is_vvar_map((struct vm_area_struct *)map)) return 1;
+ 	return (map->vm_start == (unsigned long)vmad_vdso_base);
+ }
+ EXPORT_SYMBOL_GPL(vmad_is_arch_map);
+@@ -312,6 +313,8 @@
+ {
+     loff_t r = 0;
+ 
++    if (vmad_is_vvar_map(map)) return 0;
++
+     if (vmad_is_arch_map(map)) {
+ 	/* Just write out a section header */
+         struct vmadump_vma_header head;
+@@ -373,6 +376,15 @@
+ 	 * Since no failure was indicatated we just fill it in below.
+ 	 */
+     } else if (vmad_vdso_base != (void *)head->start) {
++    #if HAVE_VM_OPS_NAME
++	/* Relocate vvar map if present immediately above or below vdso */
++        r = vmad_reloc_vvar(ctx, (unsigned long)vmad_vdso_base, head);
++	if (r) {
++	    CR_ERR_CTX(ctx, "vvar remap failed %d", (int)r);
++	    goto err;
++	}
++    #endif
++
+ 	r = vmad_remap(ctx, (unsigned long)vmad_vdso_base, head->start, head->end - head->start);
+ 	if (r) {
+ 	    CR_ERR_CTX(ctx, "vdso remap failed %d", (int)r);
+diff -Nur blcr-0.8.5/vmadump4/vmadump_ppc64.c blcr-0.8.6_b4/vmadump4/vmadump_ppc64.c
+--- blcr-0.8.5/vmadump4/vmadump_ppc64.c	2012-12-22 08:42:52.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_ppc64.c	2014-09-30 04:32:49.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_ppc64.c,v 1.9.14.4 2012/12/22 07:42:52 phargrov Exp $
++ * $Id: vmadump_ppc64.c,v 1.9.14.5 2014/09/30 02:32:49 phargrov Exp $
+  *
+  * THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -33,6 +33,15 @@
+ #  include <asm/switch_to.h>
+ #endif
+ 
++#if HAVE_THREAD_FP_STATE
++  #define thread_fp_save_area(_thread) \
++	((_thread).fp_save_area ? (_thread).fp_save_area : &(_thread).fp_state)
++#endif
++#if HAVE_THREAD_VR_STATE
++  #define thread_vr_save_area(_thread) \
++	((_thread).vr_save_area ? (_thread).vr_save_area : &(_thread).vr_state)
++#endif
++
+ long vmadump_store_cpu(cr_chkpt_proc_req_t *ctx, struct file *file,
+ 		       struct pt_regs *regs) {
+     long bytes = 0, r;
+@@ -45,6 +54,7 @@
+     /* Floating point regs */
+     if (regs->msr & MSR_FP)
+ 	giveup_fpu(current);
++#if HAVE_THREAD_FPR
+     r = write_kern(ctx, file, &current->thread.fpr,
+ 		   sizeof(current->thread.fpr));
+     if (r != sizeof(current->thread.fpr)) goto err;
+@@ -54,6 +64,14 @@
+ 		   sizeof(current->thread.fpscr));
+     if (r != sizeof(current->thread.fpscr)) goto err;
+     bytes += r;
++#elif HAVE_THREAD_FP_STATE
++    r = write_kern(ctx, file, thread_fp_save_area(current->thread),
++		   sizeof(current->thread.fp_state));
++    if (r != sizeof(current->thread.fp_state)) goto err;
++    bytes += r;
++#else
++    #error Unknown PPC floating point state
++#endif
+ 
+ #if HAVE_THREAD_VDSO_BASE
+     /* unconditionally store the base of the VDSO library */
+@@ -67,6 +85,7 @@
+     /* XXX I really need to find out if this is right */
+     if (regs->msr & MSR_VEC)
+ 	giveup_altivec(current);
++  #if HAVE_THREAD_VR
+     r = write_kern(ctx, file, &current->thread.vr,
+ 		   sizeof(current->thread.vr));
+     if (r != sizeof(current->thread.vr)) goto err;
+@@ -76,7 +95,24 @@
+ 		   sizeof(current->thread.vscr));
+     if (r != sizeof(current->thread.vscr)) goto err;
+     bytes += r;
++  #elif HAVE_THREAD_VR_STATE
++    r = write_kern(ctx, file, thread_vr_save_area(current->thread),
++		   sizeof(current->thread.vr_state));
++    if (r != sizeof(current->thread.vr_state)) goto err;
++    bytes += r;
++  #else
++    #error Unknown PPC vector register state
++  #endif
++#endif
++
++#ifdef CONFIG_VSX
++    /* TODO: VSX state */
+ #endif
++
++#ifdef CONFIG_SPE
++    /* TODO: SPE state */
++#endif
++
+     return bytes;
+ 
+  err:
+@@ -105,6 +141,7 @@
+     memcpy(regs, &regtmp, sizeof(regtmp));
+ 
+     /* Floating point regs */
++#if HAVE_THREAD_FPR
+     r = read_kern(ctx, file, &current->thread.fpr,
+ 		  sizeof(current->thread.fpr));
+     if (r != sizeof(current->thread.fpr)) goto bad_read;
+@@ -112,6 +149,11 @@
+     r = read_kern(ctx, file, &current->thread.fpscr,
+ 		  sizeof(current->thread.fpscr));
+     if (r != sizeof(current->thread.fpscr)) goto bad_read;
++#elif HAVE_THREAD_FP_STATE
++    r = read_kern(ctx, file, thread_fp_save_area(current->thread),
++		  sizeof(current->thread.fp_state));
++    if (r != sizeof(current->thread.fp_state)) goto bad_read;
++#endif
+ 
+ #if HAVE_THREAD_VDSO_BASE
+     /* unconditonally restore this */
+@@ -122,6 +164,7 @@
+ 
+ #ifdef CONFIG_ALTIVEC
+     /* Restore Altivec */
++  #if HAVE_THREAD_VR
+     r = read_kern(ctx, file, &current->thread.vr,
+ 		  sizeof(current->thread.vr));
+     if (r != sizeof(current->thread.vr)) goto bad_read;
+@@ -129,6 +172,19 @@
+     r = read_kern(ctx, file, &current->thread.vscr,
+ 		  sizeof(current->thread.vscr));
+     if (r != sizeof(current->thread.vscr)) goto bad_read;
++  #elif HAVE_THREAD_VR_STATE
++    r = read_kern(ctx, file, thread_vr_save_area(current->thread),
++		  sizeof(current->thread.vr_state));
++    if (r != sizeof(current->thread.vr_state)) goto bad_read;
++  #endif
++#endif
++
++#ifdef CONFIG_VSX
++    /* TODO: VSX state */
++#endif
++
++#ifdef CONFIG_SPE
++    /* TODO: SPE state */
+ #endif
+ 
+     current->thread.regs = regs;
+diff -Nur blcr-0.8.5/vmadump4/vmadump_ppc.c blcr-0.8.6_b4/vmadump4/vmadump_ppc.c
+--- blcr-0.8.5/vmadump4/vmadump_ppc.c	2012-12-22 08:42:52.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_ppc.c	2014-09-30 04:32:49.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_ppc.c,v 1.10.14.4 2012/12/22 07:42:52 phargrov Exp $
++ * $Id: vmadump_ppc.c,v 1.10.14.5 2014/09/30 02:32:49 phargrov Exp $
+  *
+  * THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -32,6 +32,15 @@
+ #  include <asm/switch_to.h>
+ #endif
+ 
++#if HAVE_THREAD_FP_STATE
++  #define thread_fp_save_area(_thread) \
++	((_thread).fp_save_area ? (_thread).fp_save_area : &(_thread).fp_state)
++#endif
++#if HAVE_THREAD_VR_STATE
++  #define thread_vr_save_area(_thread) \
++	((_thread).vr_save_area ? (_thread).vr_save_area : &(_thread).vr_state)
++#endif
++
+ long vmadump_store_cpu(cr_chkpt_proc_req_t *ctx, struct file *file,
+ 		       struct pt_regs *regs) {
+     long bytes = 0, r;
+@@ -44,6 +53,7 @@
+     /* Floating point regs */
+     if (regs->msr & MSR_FP)
+ 	giveup_fpu(current);
++#if HAVE_THREAD_FPR
+     r = write_kern(ctx, file, &current->thread.fpr,
+ 		   sizeof(current->thread.fpr));
+     if (r != sizeof(current->thread.fpr)) goto err;
+@@ -53,6 +63,14 @@
+ 		   sizeof(current->thread.fpscr));
+     if (r != sizeof(current->thread.fpscr)) goto err;
+     bytes += r;
++#elif HAVE_THREAD_FP_STATE
++    r = write_kern(ctx, file, thread_fp_save_area(current->thread),
++		   sizeof(current->thread.fp_state));
++    if (r != sizeof(current->thread.fp_state)) goto err;
++    bytes += r;
++#else
++    #error Unknown PPC floating point state
++#endif
+ 
+ #if HAVE_THREAD_VDSO_BASE
+     /* unconditionally store the base of the VDSO library */
+@@ -66,6 +84,7 @@
+     /* XXX I really need to find out if this is right */
+     if (regs->msr & MSR_VEC)
+ 	giveup_altivec(current);
++  #if HAVE_THREAD_VR
+     r = write_kern(ctx, file, &current->thread.vr,
+ 		   sizeof(current->thread.vr));
+     if (r != sizeof(current->thread.vr)) goto err;
+@@ -75,7 +94,24 @@
+ 		   sizeof(current->thread.vscr));
+     if (r != sizeof(current->thread.vscr)) goto err;
+     bytes += r;
++  #elif HAVE_THREAD_VR_STATE
++    r = write_kern(ctx, file, thread_vr_save_area(current->thread),
++		   sizeof(current->thread.vr_state));
++    if (r != sizeof(current->thread.vr_state)) goto err;
++    bytes += r;
++  #else
++    #error Unknown PPC vector register state
++  #endif
++#endif
++
++#ifdef CONFIG_VSX
++    /* TODO: VSX state */
+ #endif
++
++#ifdef CONFIG_SPE
++    /* TODO: SPE state */
++#endif
++
+     return bytes;
+ 
+  err:
+@@ -98,6 +134,7 @@
+     memcpy(regs, &regtmp, sizeof(regtmp));
+ 
+     /* Floating point regs */
++#if HAVE_THREAD_FPR
+     r = read_kern(ctx, file, &current->thread.fpr,
+ 		  sizeof(current->thread.fpr));
+     if (r != sizeof(current->thread.fpr)) goto bad_read;
+@@ -105,6 +142,11 @@
+     r = read_kern(ctx, file, &current->thread.fpscr,
+ 		  sizeof(current->thread.fpscr));
+     if (r != sizeof(current->thread.fpscr)) goto bad_read;
++#elif HAVE_THREAD_FP_STATE
++    r = read_kern(ctx, file, thread_fp_save_area(current->thread),
++		  sizeof(current->thread.fp_state));
++    if (r != sizeof(current->thread.fp_state)) goto bad_read;
++#endif
+ 
+ #if HAVE_THREAD_VDSO_BASE
+     /* unconditonally restore this */
+@@ -115,6 +157,7 @@
+ 
+ #ifdef CONFIG_ALTIVEC
+     /* Restore Altivec */
++  #if HAVE_THREAD_VR
+     r = read_kern(ctx, file, &current->thread.vr,
+ 		  sizeof(current->thread.vr));
+     if (r != sizeof(current->thread.vr)) goto bad_read;
+@@ -122,6 +165,19 @@
+     r = read_kern(ctx, file, &current->thread.vscr,
+ 		  sizeof(current->thread.vscr));
+     if (r != sizeof(current->thread.vscr)) goto bad_read;
++  #elif HAVE_THREAD_VR_STATE
++    r = read_kern(ctx, file, thread_vr_save_area(current->thread),
++		  sizeof(current->thread.vr_state));
++    if (r != sizeof(current->thread.vr_state)) goto bad_read;
++  #endif
++#endif
++
++#ifdef CONFIG_VSX
++    /* TODO: VSX state */
++#endif
++
++#ifdef CONFIG_SPE
++    /* TODO: SPE state */
+ #endif
+ 
+     current->thread.regs = regs;
+diff -Nur blcr-0.8.5/vmadump4/vmadump_x86_64.c blcr-0.8.6_b4/vmadump4/vmadump_x86_64.c
+--- blcr-0.8.5/vmadump4/vmadump_x86_64.c	2013-01-08 08:23:50.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_x86_64.c	2014-09-19 01:46:11.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_x86_64.c,v 1.50.8.8 2013/01/08 07:23:50 phargrov Exp $
++ * $Id: vmadump_x86_64.c,v 1.50.8.9 2014/09/18 23:46:11 phargrov Exp $
+  *
+  * THIS VERSION MODIFIED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -354,6 +354,8 @@
+ {
+     unsigned long vdso_base = (unsigned long) vmad_vdso_base;
+ 
++    if (vmad_is_vvar_map((struct vm_area_struct *)map)) return 1;
++
+   #if HAVE_MM_CONTEXT_VDSO && defined(VSYSCALL32_BASE)
+     /* Some RHEL5 kernels use fix the VSYSCALL32_BASE for 32-bit tasks and 
+      * current->mm->context.vdso for 64-bit tasks.  Since we need to
+@@ -372,6 +374,8 @@
+ {
+     loff_t r = 0;
+ 
++    if (vmad_is_vvar_map(map)) return 0;
++
+     if (vmad_is_arch_map(map)) {
+ 	/* Just write out a section header */
+         struct vmadump_vma_header head;
+@@ -409,6 +413,10 @@
+     if (test_thread_flag(TIF_IA32)) {
+ 	r = syscall32_setup_pages(NULL, 0);
+     } else
++  #elif defined(CR_KCODE_compat_arch_setup_additional_pages)
++    if (test_thread_flag(TIF_IA32)) {
++	r = compat_arch_setup_additional_pages(NULL, 0);
++    } else
+   #endif
+     {
+   #if HAVE_2_ARG_ARCH_SETUP_ADDITIONAL_PAGES
+@@ -441,6 +449,15 @@
+         }
+     #endif
+     } else if (vmad_vdso_base != (void *)head->start) {
++    #if HAVE_VM_OPS_NAME
++        /* Relocate vvar map if present immediately above or below vdso */
++        r = vmad_reloc_vvar(ctx, (unsigned long)vmad_vdso_base, head);
++        if (r) {
++            CR_ERR_CTX(ctx, "vvar remap failed %d", (int)r);
++            goto err;
++        }
++    #endif
++
+ 	r = vmad_remap(ctx, (unsigned long)vmad_vdso_base, head->start, head->end - head->start);
+ 	if (r) {
+ 	    CR_ERR_CTX(ctx, "vdso remap failed %d", (int)r);
+diff -Nur blcr-0.8.5/vmadump4/vmadump_x86.h blcr-0.8.6_b4/vmadump4/vmadump_x86.h
+--- blcr-0.8.5/vmadump4/vmadump_x86.h	2012-12-18 19:32:09.000000000 +0100
++++ blcr-0.8.6_b4/vmadump4/vmadump_x86.h	2014-09-19 01:46:11.000000000 +0200
+@@ -17,7 +17,7 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * $Id: vmadump_x86.h,v 1.9.8.3 2012/12/18 18:32:09 phargrov Exp $
++ * $Id: vmadump_x86.h,v 1.9.8.4 2014/09/18 23:46:11 phargrov Exp $
+  *
+  *  THIS FILE ADDED FOR BLCR <http://ftg.lbl.gov/checkpoint>
+  *-----------------------------------------------------------------------*/
+@@ -287,4 +287,40 @@
+     return r;
+ }
+ 
++
++#if VMAD_HAVE_ARCH_MAPS
++  #if HAVE_VM_OPS_NAME
++    #define vmad_is_vvar_map(map) \
++	((map)->vm_ops && (map)->vm_ops->name && !strcmp("[vvar]", (map)->vm_ops->name(map)))
++
++    /* Relocate vvar map if present immediately above or below vdso */
++    static long vmad_reloc_vvar(cr_rstrt_proc_req_t *ctx,
++                                unsigned long vdso_start, 
++                                struct vmadump_vma_header *vdso_head)
++    {
++        long r = 0;
++	unsigned long vvar_start = 0;
++	unsigned long vdso_end = vdso_start + (vdso_head->end - vdso_head->start);
++	struct vm_area_struct *map;
++
++	if ((NULL != (map = find_vma(current->mm, vdso_end))) &&
++	    (map->vm_start == vdso_end)) {
++	    vvar_start = vdso_head->end;
++	} else
++	if ((NULL != (map = find_vma(current->mm, vdso_start - PAGE_SIZE))) &&
++	    (map->vm_end == vdso_start)) {
++	    vvar_start = vdso_head->start - (map->vm_end - map->vm_start);
++	}
++
++	if (vvar_start && vmad_is_vvar_map(map)) {
++	    r = vmad_remap(ctx, map->vm_start, vvar_start, map->vm_end - map->vm_start);
++	}
++
++        return r;
++    }
++  #else
++    #define vmad_is_vvar_map(map) 0
++  #endif
++#endif
++
+ #endif /* _VMADUMP_X86_H */
