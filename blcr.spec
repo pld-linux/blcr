@@ -12,7 +12,7 @@
 %endif
 
 %define	pname	blcr
-%define	rel	2
+%define	rel	3
 Summary:	Berkeley Lab Checkpoint/Restart for Linux
 Summary(pl.UTF-8):	Berkeley Lab Checkpoint/Restart dla Linuksa
 Name:		%{pname}%{?_pld_builder:%{?with_kernel:-kernel}}%{_alt_kernel}
@@ -139,7 +139,7 @@ p=`pwd`\
 %{__make} install DESTDIR=$p/installed\
 %{nil}
 
-%{expand:%create_kernel_packages}
+%{?with_kernel:%{expand:%create_kernel_packages}}
 
 %prep
 %setup -q
