@@ -12,7 +12,7 @@
 %endif
 
 %define	pname	blcr
-%define	rel	1
+%define	rel	2
 Summary:	Berkeley Lab Checkpoint/Restart for Linux
 Summary(pl.UTF-8):	Berkeley Lab Checkpoint/Restart dla Linuksa
 Name:		%{pname}%{?_pld_builder:%{?with_kernel:-kernel}}%{_alt_kernel}
