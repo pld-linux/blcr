@@ -1,4 +1,3 @@
-# TODO: multi-kernels build?
 # NOTE: probably doesn't work with kernel address space randomization(?)
 #
 # Conditional build:
@@ -7,13 +6,18 @@
 %bcond_without	userspace	# userspace library and utilities
 %bcond_with	verbose		# verbose build (V=1) of kernel modules
 #
+%if %{without userspace}
+# nothing to be placed to debuginfo package
+%define		_enable_debug_packages	0
+%endif
+
+%define	pname	blcr
+%define	rel	1
 Summary:	Berkeley Lab Checkpoint/Restart for Linux
 Summary(pl.UTF-8):	Berkeley Lab Checkpoint/Restart dla Linuksa
-%define	pname	blcr
-Name:		%{pname}
+Name:		%{pname}%{?_pld_builder:%{?with_kernel:-kernel}}%{_alt_kernel}
 Version:	0.8.5
-%define	rel	1
-Release:	%{rel}
+Release:	%{rel}%{?_pld_builder:%{?with_kernel:@%{_kernel_ver_str}}}
 License:	LGPL v2+ (library), GPL v2+ (utilities and modules)
 Group:		Libraries
 #Source0Download: http://crd.lbl.gov/departments/computer-science/CLaSS/research/BLCR/berkeley-lab-checkpoint-restart-for-linux-blcr-downloads/
@@ -32,10 +36,11 @@ BuildRequires:	ftb-devel
 BuildRequires:	glibc-devel >= 5:2.4
 %endif
 %if %{with kernel}
+BuildRequires:	rpmbuild(macros) >= 1.701
 # for System.map symbol lookups
-BuildRequires:	kernel%{_alt_kernel} = 3:%{_kernel_ver}
-BuildRequires:	kernel%{_alt_kernel}-module-build = 3:%{_kernel_ver}
-BuildRequires:	kernel%{_alt_kernel}-module-build >= 3:2.6
+%{expand:%buildrequires_kernel kernel%{_alt_kernel} = 3:%{_kernel_ver}}
+%{expand:%buildrequires_kernel kernel%{_alt_kernel}-module-build = 3:%{_kernel_ver}}
+%{expand:%buildrequires_kernel kernel%{_alt_kernel}-module-build >= 3:2.6}
 %endif
 ExclusiveArch:	%{ix86} %{x8664} arm ppc ppc64 sparc sparcv9 sparc64
 ExcludeArch:	i386
@@ -90,21 +95,51 @@ Static BLCR library.
 %description static -l pl.UTF-8
 Statyczna biblioteka BLCR.
 
-%package -n kernel%{_alt_kernel}-extra-blcr
-Summary:	BLCR modules for Linux kernel
-Summary(pl.UTF-8):	Moduły BLCR dla jądra Linuksa
-Release:	%{rel}@%{_kernel_ver_str}
-License:	GPL v2+
-Group:		Base/Kernel
-Requires(post,postun):	/sbin/depmod
-%requires_releq_kernel
-Requires(postun):	%releq_kernel
+%define kernel_pkg()\
+%package -n kernel%{_alt_kernel}-misc-blcr\
+Summary:	BLCR modules for Linux kernel\
+Summary(pl.UTF-8):	Moduły BLCR dla jądra Linuksa\
+Release:	%{rel}@%{_kernel_ver_str}\
+License:	GPL v2+\
+Group:		Base/Kernel\
+Requires(post,postun):	/sbin/depmod\
+%requires_releq_kernel\
+Requires(postun):	%releq_kernel\
+\
+%description -n kernel%{_alt_kernel}-misc-blcr\
+BLCR modules for Linux kernel.\
+\
+%description -n kernel%{_alt_kernel}-misc-blcr -l pl.UTF-8\
+Moduły BLCR dla jądra Linuksa.\
+\
+%files -n kernel%{_alt_kernel}-misc-blcr\
+%defattr(644,root,root,755)\
+/lib/modules/%{_kernel_ver}/misc/blcr.ko*\
+/lib/modules/%{_kernel_ver}/misc/blcr_imports.ko*\
+\
+%post	-n kernel%{_alt_kernel}-misc-blcr\
+%depmod %{_kernel_ver}\
+\
+%postun	-n kernel%{_alt_kernel}-misc-blcr\
+%depmod %{_kernel_ver}\
+%{nil}
 
-%description -n kernel%{_alt_kernel}-extra-blcr
-BLCR modules for Linux kernel.
+%define build_kernel_pkg()\
+%configure \\\
+	%{?with_verbose:--enable-kbuild-verbose} \\\
+	--with-linux=%{_kernel_ver} \\\
+	--with-linux-src=%{_kernelsrcdir} \\\
+	--with-kmod-dir=/lib/modules/%{_kernel_ver}/misc \\\
+	--with-system-map=/boot/System.map-%{_kernel_ver} \\\
+	--with-components="%{?with_kernel:modules}"\
+\
+%{__make} clean\
+%{__make}\
+p=`pwd`\
+%{__make} install DESTDIR=$p/installed\
+%{nil}
 
-%description -n kernel%{_alt_kernel}-extra-blcr -l pl.UTF-8
-Moduły BLCR dla jądra Linuksa.
+%{expand:%create_kernel_packages}
 
 %prep
 %setup -q
@@ -117,20 +152,25 @@ Moduły BLCR dla jądra Linuksa.
 %{__autoconf}
 %{__autoheader}
 %{__automake}
+
+%{?with_kernel:%{expand:%build_kernel_packages}}
+
+%if %{with userspace}
 %configure \
 	%{?with_static_libs:--enable-static} \
-%if %{with kernel}
-	%{?with_verbose:--enable-kbuild-verbose} \
-	--with-linux=%{_kernel_ver} \
-	--with-linux-src=%{_kernelsrcdir} \
-	--with-system-map=/boot/System.map-%{_kernel_ver} \
-%endif
-	--with-components="%{?with_kernel:modules} %{?with_userspace:util libcr include tests examples contrib}"
+	--with-components="%{?with_userspace:util libcr include tests examples contrib}"
 
+%{__make} clean
 %{__make}
+%endif
 
 %install
 rm -rf $RPM_BUILD_ROOT
+
+%if %{with kernel}
+install -d $RPM_BUILD_ROOT
+cp -a installed/* $RPM_BUILD_ROOT
+%endif
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
@@ -140,12 +180,6 @@ rm -rf $RPM_BUILD_ROOT
 
 %post	-p /sbin/ldconfig
 %postun	-p /sbin/ldconfig
-
-%post	-n kernel%{_alt_kernel}-extra-blcr
-%depmod %{_kernel_ver}
-
-%postun	-n kernel%{_alt_kernel}-extra-blcr
-%depmod %{_kernel_ver}
 
 %if %{with userspace}
 %files
@@ -183,11 +217,4 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libcr_omit.a
 %{_libdir}/libcr_run.a
 %endif
-%endif
-
-%if %{with kernel}
-%files -n kernel%{_alt_kernel}-extra-blcr
-%defattr(644,root,root,755)
-/lib/modules/%{_kernel_ver}/extra/blcr.ko*
-/lib/modules/%{_kernel_ver}/extra/blcr_imports.ko*
 %endif
