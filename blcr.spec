@@ -12,7 +12,7 @@
 %endif
 
 %define	pname	blcr
-%define	rel	4
+%define	rel	5
 Summary:	Berkeley Lab Checkpoint/Restart for Linux
 Summary(pl.UTF-8):	Berkeley Lab Checkpoint/Restart dla Linuksa
 Name:		%{pname}%{?_pld_builder:%{?with_kernel:-kernel}}%{_alt_kernel}
@@ -38,9 +38,9 @@ BuildRequires:	glibc-devel >= 5:2.4
 %if %{with kernel}
 BuildRequires:	rpmbuild(macros) >= 1.701
 # for System.map symbol lookups
-%{expand:%buildrequires_kernel kernel%{_alt_kernel} = %{kernel_version}}
-%{expand:%buildrequires_kernel kernel%{_alt_kernel}-module-build = %{kernel_version}}
-%{expand:%buildrequires_kernel kernel%{_alt_kernel}-module-build >= 3:2.6}
+%{expand:%buildrequires_kernel kernel%%{_alt_kernel} = %%{kernel_version}}
+%{expand:%buildrequires_kernel kernel%%{_alt_kernel}-module-build = %%{kernel_version}}
+%{expand:%buildrequires_kernel kernel%%{_alt_kernel}-module-build >= 3:2.6}
 %endif
 ExclusiveArch:	%{ix86} %{x8664} arm ppc ppc64 sparc sparcv9 sparc64
 ExcludeArch:	i386
