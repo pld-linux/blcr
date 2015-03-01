@@ -42,7 +42,7 @@ BuildRequires:	rpmbuild(macros) >= 1.701
 %{expand:%buildrequires_kernel kernel%%{_alt_kernel}-module-build = %%{kernel_version}}
 %{expand:%buildrequires_kernel kernel%%{_alt_kernel}-module-build >= 3:2.6}
 %endif
-ExclusiveArch:	%{ix86} %{x8664} arm ppc ppc64 sparc sparcv9 sparc64
+ExclusiveArch:	%{ix86} %{x8664} x32 arm ppc ppc64 sparc sparcv9 sparc64
 ExcludeArch:	i386
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
